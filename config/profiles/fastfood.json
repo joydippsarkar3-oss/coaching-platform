@@ -1,0 +1,59 @@
+{
+  "$schema": "../profile.schema.json",
+  "id": "fastfood",
+  "display_name": "Fast Food / QSR",
+  "version": 1,
+  "modules": ["QUICK_SALE", "CATALOG", "KOT_TOKEN"],
+  "default_landing": "quick_sale",
+  "state_labels": {
+    "CREATED": "Preparing",
+    "IN_PROGRESS": "Preparing",
+    "READY": "Order Ready",
+    "COMPLETED": "Served",
+    "CANCELLED": "Cancelled"
+  },
+  "field_packs": [
+    {
+      "key": "order_mode",
+      "label": "Dine-in / Parcel",
+      "type": "select",
+      "required": true,
+      "options": ["Dine-in", "Parcel"],
+      "show_on_customer_copy": true,
+      "show_on_shop_copy": true
+    }
+  ],
+  "home_quick_actions": [
+    { "id": "new_bill", "label": "New Bill", "screen": "quick_sale" },
+    { "id": "live_tokens", "label": "Live Tokens", "screen": "live_tokens" },
+    { "id": "menu", "label": "Menu", "screen": "catalog" },
+    { "id": "reports", "label": "Reports", "screen": "reports" }
+  ],
+  "receipt_template": "rcpt-qsr-token-v1",
+  "catalog_field_hints": {
+    "unit_types": ["piece", "plate"],
+    "allow_decimal_qty": false,
+    "variants_enabled": true,
+    "addons_enabled": true,
+    "batch_tracking": false,
+    "barcode_scan": false,
+    "default_gst_rates": [0, 5],
+    "item_noun": "Dish"
+  },
+  "sample_catalog": [
+    { "name": "Veg Burger", "price": 60, "gst_rate": 5, "unit": "piece" },
+    { "name": "Cheese Sandwich", "price": 80, "gst_rate": 5, "unit": "piece" },
+    { "name": "French Fries", "price": 70, "gst_rate": 5, "unit": "plate" },
+    { "name": "Masala Dosa", "price": 90, "gst_rate": 5, "unit": "plate" },
+    { "name": "Paneer Roll", "price": 100, "gst_rate": 5, "unit": "piece" },
+    { "name": "Veg Fried Rice", "price": 110, "gst_rate": 5, "unit": "plate" },
+    { "name": "Cold Coffee", "price": 70, "gst_rate": 5, "unit": "piece" },
+    { "name": "Masala Chai", "price": 15, "gst_rate": 5, "unit": "piece" }
+  ],
+  "behavior_flags": {
+    "quick_sale_tracking_qr_default": true,
+    "quick_sale_instant_complete": false,
+    "auto_complete_at_day_close": true,
+    "token_reset_time": "05:00"
+  }
+}

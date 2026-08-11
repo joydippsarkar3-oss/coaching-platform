@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>BizBill — Super Admin Panel (Wireframe)</title>
+<!--
+  BizBill wireframe: Super Admin Panel (admin.bizbill.app)
+  PRD refs: Section 5.3 (FR-5.16..FR-5.24), Section 8 (plans, subscription lifecycle, metrics)
+  Desktop layout. MVP role: Owner (Google Sign-In allowlist + TOTP 2FA).
+  Self-contained: inline CSS/JS, no external resources. Chart areas are placeholders by design.
+  Date context: 2026-07-31.
+-->
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: #f1f5f9; color: #0f172a; font-size: 14px;
+  }
+  .layout { display: flex; min-height: 100vh; }
+
+  /* ---------- Left nav ---------- */
+  .sidenav {
+    width: 220px; flex: 0 0 220px;
+    background: #0f172a; color: #cbd5e1;
+    display: flex; flex-direction: column;
+    position: sticky; top: 0; height: 100vh;
+  }
+  .brand { padding: 18px 16px 14px; border-bottom: 1px solid #1e293b; }
+  .brand .name { font-size: 18px; font-weight: 800; color: #ffffff; letter-spacing: 0.3px; }
+  .brand .sub { font-size: 11px; color: #94a3b8; margin-top: 2px; letter-spacing: 1px; text-transform: uppercase; }
+  .nav-items { flex: 1; padding: 10px 8px; }
+  .nav-item {
+    display: block; width: 100%; text-align: left;
+    background: none; border: none; cursor: pointer;
+    font-family: inherit; font-size: 14px; font-weight: 600; color: #cbd5e1;
+    padding: 10px 12px; border-radius: 8px; margin-bottom: 2px;
+  }
+  .nav-item:hover { background: #1e293b; color: #ffffff; }
+  .nav-item.active { background: #2563eb; color: #ffffff; }
+  .admin-chip { padding: 14px 16px; border-top: 1px solid #1e293b; font-size: 12px; color: #94a3b8; line-height: 1.5; }
+  .admin-chip b { color: #e2e8f0; }
+  .role-chip {
+    display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: 1px;
+    background: #1e293b; color: #93c5fd; border: 1px solid #334155;
+    border-radius: 999px; padding: 1px 8px; margin-left: 4px;
+  }
+
+  /* ---------- Main ---------- */
+  .main { flex: 1; min-width: 0; }
+  .topbar {
+    background: #ffffff; border-bottom: 1px solid #e2e8f0;
+    padding: 14px 24px; display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 10;
+  }
+  .topbar h1 { font-size: 18px; font-weight: 800; }
+  .topbar .session { font-size: 12px; color: #64748b; }
+  .topbar .session b { color: #0f172a; }
+  .content { padding: 24px; max-width: 1200px; }
+
+  .tab { display: none; }
+  .tab.active { display: block; }
+
+  /* ---------- Shared bits ---------- */
+  .panel { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px; margin-bottom: 20px; }
+  .panel h2 { font-size: 15px; font-weight: 800; margin-bottom: 12px; }
+  .muted { color: #64748b; font-size: 12px; }
+  .footnote { font-size: 11.5px; color: #64748b; line-height: 1.5; margin-top: 10px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    text-align: left; font-size: 11px; letter-spacing: 0.8px; text-transform: uppercase;
+    color: #64748b; padding: 8px 10px; border-bottom: 2px solid #e2e8f0; white-space: nowrap;
+  }
+  td { padding: 10px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+  tr.rowlink { cursor: pointer; }
+  tr.rowlink:hover { background: #f8fafc; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  .chip {
+    display: inline-block; font-size: 10.5px; font-weight: 800; letter-spacing: 0.6px;
+    padding: 2px 9px; border-radius: 999px; text-transform: uppercase;
+  }
+  .c-active    { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+  .c-trial     { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+  .c-suspended { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+  .c-banned    { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+  .c-pastdue   { background: #ffedd5; color: #9a3412; border: 1px solid #fdba74; }
+  .c-plan      { background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
+
+  .btn {
+    display: inline-block; font-family: inherit; font-size: 13px; font-weight: 700;
+    padding: 8px 14px; border-radius: 8px; cursor: pointer; border: 1px solid transparent;
+  }
+  .btn-primary { background: #2563eb; color: #ffffff; }
+  .btn-outline { background: #ffffff; color: #334155; border-color: #cbd5e1; }
+  .btn-danger  { background: #ffffff; color: #b91c1c; border-color: #fca5a5; }
+  .btn-sm { font-size: 12px; padding: 5px 10px; }
+  .btn:hover { filter: brightness(0.96); }
+
+  /* ---------- Tenants toolbar ---------- */
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .toolbar input[type="search"], .toolbar select {
+    font-family: inherit; font-size: 13px; color: #0f172a;
+    border: 1px solid #cbd5e1; border-radius: 8px; background: #ffffff;
+    padding: 8px 10px;
+  }
+  .toolbar input[type="search"] { flex: 1; min-width: 220px; }
+
+  /* ---------- Stat tiles ---------- */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .tile { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px; }
+  .tile .k { font-size: 11px; letter-spacing: 0.8px; text-transform: uppercase; color: #64748b; }
+  .tile .v { font-size: 22px; font-weight: 800; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .tile .d { font-size: 11px; margin-top: 3px; color: #64748b; }
+  .tile .d.up { color: #166534; }
+  .tile .d.down { color: #991b1b; }
+
+  /* ---------- Chart placeholders (deliberately NOT real charts) ---------- */
+  .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .chart-ph {
+    background: #e5e7eb; border: 2px dashed #9ca3af; border-radius: 12px;
+    height: 220px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center; padding: 12px;
+  }
+  .chart-ph .t { font-size: 14px; font-weight: 800; color: #4b5563; }
+  .chart-ph .s { font-size: 11.5px; color: #6b7280; margin-top: 6px; max-width: 320px; line-height: 1.45; }
+  .chart-ph .tag {
+    font-size: 9.5px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;
+    color: #6b7280; border: 1px solid #9ca3af; border-radius: 999px; padding: 2px 8px; margin-top: 10px;
+  }
+
+  /* ---------- Tenant detail drawer ---------- */
+  .drawer-overlay {
+    position: fixed; inset: 0; background: rgba(15, 23, 42, 0.35);
+    opacity: 0; pointer-events: none; transition: opacity 0.15s ease; z-index: 40;
+  }
+  .drawer {
+    position: fixed; top: 0; right: -420px; width: 400px; max-width: 92vw; height: 100vh;
+    background: #ffffff; border-left: 1px solid #e2e8f0;
+    box-shadow: -8px 0 24px rgba(15, 23, 42, 0.12);
+    transition: right 0.18s ease; z-index: 41;
+    display: flex; flex-direction: column;
+  }
+  body.drawer-open .drawer { right: 0; }
+  body.drawer-open .drawer-overlay { opacity: 1; pointer-events: auto; }
+  .drawer-head { padding: 16px 18px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: flex-start; }
+  .drawer-head h3 { font-size: 17px; font-weight: 800; }
+  .drawer-head .sub { font-size: 12px; color: #64748b; margin-top: 3px; }
+  .drawer-close {
+    background: none; border: 1px solid #cbd5e1; border-radius: 8px;
+    font-size: 14px; font-weight: 700; color: #64748b; cursor: pointer; padding: 3px 9px;
+  }
+  .drawer-body { flex: 1; overflow-y: auto; padding: 16px 18px; }
+  .dsec { margin-bottom: 18px; }
+  .dsec h4 { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: #64748b; margin-bottom: 8px; }
+  .kv { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 4px 0; }
+  .kv .k { color: #64748b; }
+  .kv .v { font-weight: 600; text-align: right; }
+  .modchips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .modchip {
+    font-size: 10px; font-weight: 700; font-family: Consolas, Menlo, monospace;
+    background: #f1f5f9; border: 1px solid #cbd5e1; color: #334155;
+    border-radius: 6px; padding: 2px 7px;
+  }
+  .usage-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .usage-cell { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 10px; }
+  .usage-cell .k { font-size: 10px; letter-spacing: 0.5px; text-transform: uppercase; color: #64748b; }
+  .usage-cell .v { font-size: 15px; font-weight: 800; margin-top: 2px; }
+  .history { list-style: none; }
+  .history li { font-size: 12px; color: #475569; padding: 4px 0 4px 12px; border-left: 2px solid #e2e8f0; margin-left: 4px; }
+  .drawer-actions { border-top: 1px solid #e2e8f0; padding: 14px 18px; background: #f8fafc; }
+  .drawer-actions .btn { width: 100%; margin-bottom: 8px; text-align: center; }
+  .warn-note {
+    font-size: 11px; line-height: 1.5; color: #92400e;
+    background: #fef3c7; border: 1px solid #fcd34d; border-radius: 8px;
+    padding: 8px 10px; margin: -2px 0 10px;
+  }
+  .danger-note { font-size: 11px; line-height: 1.5; color: #7f1d1d; margin-top: -2px; }
+
+  /* ---------- Announcements ---------- */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .form-row { margin-bottom: 12px; }
+  .form-row label.fl { display: block; font-size: 11px; letter-spacing: 0.8px; text-transform: uppercase; color: #64748b; margin-bottom: 5px; }
+  .form-row input[type="text"], .form-row textarea, .form-row input[type="datetime-local"] {
+    width: 100%; font-family: inherit; font-size: 13px;
+    border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px;
+  }
+  .form-row textarea { min-height: 80px; resize: vertical; }
+  .checks { display: flex; flex-wrap: wrap; gap: 12px; font-size: 13px; color: #334155; }
+  .checks label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+
+  /* ---------- Toast (wireframe-only affordance) ---------- */
+  #toast {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%) translateY(80px);
+    background: #0f172a; color: #f8fafc; font-size: 13px; font-weight: 600;
+    padding: 10px 18px; border-radius: 999px; transition: transform 0.2s ease; z-index: 60;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+
+  .wf-banner {
+    background: #fefce8; border-bottom: 2px dashed #ca8a04;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase;
+    color: #854d0e; text-align: center; padding: 5px 10px;
+  }
+</style>
+</head>
+<body>
+
+<div class="wf-banner">Wireframe — BizBill Super Admin Panel (admin.bizbill.app) — chart areas are placeholders by design</div>
+
+<div class="layout">
+
+  <!-- ============ Left nav ============ -->
+  <nav class="sidenav">
+    <div class="brand">
+      <div class="name">BizBill</div>
+      <div class="sub">Super Admin</div>
+    </div>
+    <div class="nav-items">
+      <button class="nav-item active" data-tab="tenants">Tenants</button>
+      <button class="nav-item" data-tab="revenue">Revenue</button>
+      <button class="nav-item" data-tab="metrics">Metrics</button>
+      <button class="nav-item" data-tab="subscriptions">Subscriptions</button>
+      <button class="nav-item" data-tab="announcements">Announcements</button>
+    </div>
+    <div class="admin-chip">
+      <b>owner@bizbill.app</b><span class="role-chip">Owner</span><br>
+      Google SSO allowlist · TOTP 2FA<br>
+      All actions audit-logged
+    </div>
+  </nav>
+
+  <!-- ============ Main ============ -->
+  <div class="main">
+    <div class="topbar">
+      <h1 id="tab-title">Tenants</h1>
+      <div class="session">Session started 10:14 · IP 103.24.x.x logged · <b>2FA verified</b></div>
+    </div>
+
+    <div class="content">
+
+      <!-- ================= TENANTS ================= -->
+      <section class="tab active" id="tab-tenants">
+        <div class="panel">
+          <h2>Tenant directory</h2>
+          <div class="toolbar">
+            <input type="search" id="t-search" placeholder="Search by shop name, SHOPCODE, or phone…">
+            <select id="t-plan">
+              <option value="">All plans</option>
+              <option value="Free">Free</option>
+              <option value="Pro">Pro</option>
+              <option value="Growth">Growth</option>
+            </select>
+            <select id="t-type">
+              <option value="">All business types</option>
+              <option>Printing &amp; Custom Jobs</option>
+              <option>Kirana / Grocery</option>
+              <option>Pharmacy</option>
+              <option>Fast Food / QSR</option>
+              <option>Other Services</option>
+            </select>
+            <select id="t-status">
+              <option value="">All statuses</option>
+              <option value="active">Active</option>
+              <option value="trial">Trial</option>
+              <option value="suspended">Suspended</option>
+              <option value="banned">Banned</option>
+            </select>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Shop</th><th>Shopcode</th><th>Phone</th><th>Business type</th>
+                <th>Plan</th><th>Status</th><th class="num">Bills/day</th><th>Last sync</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="tenant-rows"><!-- rendered by JS --></tbody>
+          </table>
+          <div class="footnote" id="tenant-count"></div>
+        </div>
+      </section>
+
+      <!-- ================= REVENUE ================= -->
+      <section class="tab" id="tab-revenue">
+        <div class="toolbar" style="margin-bottom:16px;">
+          <select>
+            <option>July 2026</option><option>June 2026</option><option>May 2026</option><option>April 2026</option>
+          </select>
+          <span class="muted" style="align-self:center;">Definitions &amp; billing source of truth: PRD Section 8 (Razorpay Subscriptions).</span>
+        </div>
+        <div class="tiles">
+          <div class="tile"><div class="k">MRR</div><div class="v">Rs 86,400</div><div class="d up">+ Rs 6,200 vs June</div></div>
+          <div class="tile"><div class="k">New subscriptions</div><div class="v">41</div><div class="d">this month</div></div>
+          <div class="tile"><div class="k">Churned</div><div class="v">9</div><div class="d down">gross churn 2.6%</div></div>
+          <div class="tile"><div class="k">Trial → paid</div><div class="v">8.2%</div><div class="d up">target ≥ 8% by month 6</div></div>
+          <div class="tile"><div class="k">Failed renewals</div><div class="v">12</div><div class="d">7 in dunning grace</div></div>
+        </div>
+        <div class="chart-grid">
+          <div class="chart-ph">
+            <div class="t">MRR</div>
+            <div class="s">12-month trend line with new / expansion / contraction / churn movement breakdown.</div>
+            <div class="tag">Chart placeholder — do not implement in wireframe</div>
+          </div>
+          <div class="chart-ph">
+            <div class="t">Plan mix</div>
+            <div class="s">Distribution of tenants across Free / Pro (Rs.199/mo) / Growth (Rs.399/mo), monthly stacked.</div>
+            <div class="tag">Chart placeholder — do not implement in wireframe</div>
+          </div>
+          <div class="chart-ph">
+            <div class="t">DAU merchants</div>
+            <div class="s">Daily active merchants, 90-day trend.</div>
+            <div class="tag">Chart placeholder — do not implement in wireframe</div>
+          </div>
+          <div class="chart-ph">
+            <div class="t">Bills/day</div>
+            <div class="s">Bills created per day across all tenants, 90-day trend.</div>
+            <div class="tag">Chart placeholder — do not implement in wireframe</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= METRICS ================= -->
+      <section class="tab" id="tab-metrics">
+        <div class="tiles">
+          <div class="tile"><div class="k">DAU merchants</div><div class="v">1,284</div><div class="d up">+4.1% w/w</div></div>
+          <div class="tile"><div class="k">Bills created/day</div><div class="v">9,412</div><div class="d">yesterday</div></div>
+          <div class="tile"><div class="k">Tracking scans/day</div><div class="v">3,861</div><div class="d">page loads + polls</div></div>
+          <div class="tile"><div class="k">Sync-failure rate</div><div class="v">0.7%</div><div class="d">of sync batches, 24h</div></div>
+          <div class="tile"><div class="k">API error rate</div><div class="v">0.21%</div><div class="d">5xx / total, 24h</div></div>
+        </div>
+        <div class="chart-grid">
+          <div class="chart-ph">
+            <div class="t">DAU merchants — 90-day trend</div>
+            <div class="s">Daily active merchants over the trailing 90 days.</div>
+            <div class="tag">Chart placeholder — do not implement in wireframe</div>
+          </div>
+          <div class="chart-ph">
+            <div class="t">Bills/day &amp; tracking scans/day — 90-day trend</div>
+            <div class="s">Two series on shared time axis.</div>
+            <div class="tag">Chart placeholder — do not implement in wireframe</div>
+          </div>
+          <div class="chart-ph">
+            <div class="t">Sync-failure rate — 90-day trend</div>
+            <div class="s">Percentage of failed sync batches per day.</div>
+            <div class="tag">Chart placeholder — do not implement in wireframe</div>
+          </div>
+          <div class="chart-ph">
+            <div class="t">API error rate — 90-day trend</div>
+            <div class="s">5xx responses / total requests per day.</div>
+            <div class="tag">Chart placeholder — do not implement in wireframe</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= SUBSCRIPTIONS ================= -->
+      <section class="tab" id="tab-subscriptions">
+        <div class="panel">
+          <h2>Dunning &amp; at-risk subscriptions</h2>
+          <table>
+            <thead>
+              <tr><th>Tenant</th><th>Plan</th><th>Subscription state</th><th>Last charge attempt</th><th>Next retry</th><th></th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Anand Medical Stores <span class="muted">(ANMD)</span></td>
+                <td><span class="chip c-plan">Pro</span></td>
+                <td><span class="chip c-pastdue">past_due · grace day 3/7</span></td>
+                <td>28 Jul 2026 — UPI Autopay failed</td>
+                <td>01 Aug 2026 (Razorpay auto-retry)</td>
+                <td><button class="btn btn-outline btn-sm wf-action">Extend</button> <button class="btn btn-outline btn-sm wf-action">Comp plan</button></td>
+              </tr>
+              <tr>
+                <td>City Mobile Repair <span class="muted">(CMRP)</span></td>
+                <td><span class="chip c-plan">Pro</span></td>
+                <td><span class="chip c-suspended">suspended · grace expired</span></td>
+                <td>19 Jul 2026 — card declined</td>
+                <td>— (reverted to Free entitlements)</td>
+                <td><button class="btn btn-outline btn-sm wf-action">Extend</button> <button class="btn btn-outline btn-sm wf-action">Comp plan</button></td>
+              </tr>
+              <tr>
+                <td>Raju Fast Food <span class="muted">(RJFF)</span></td>
+                <td><span class="chip c-plan">Pro (trial)</span></td>
+                <td><span class="chip c-trial">trialing · ends 09 Aug 2026</span></td>
+                <td>— (no mandate during trial)</td>
+                <td>—</td>
+                <td><button class="btn btn-outline btn-sm wf-action">Extend trial</button></td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="footnote">
+            Extend / comp require a mandatory reason and are audit-logged (FR-5.19, FR-8.12).
+            Refunds are <b>recorded</b> here and entitlement revoked in BizBill; the money movement itself is executed
+            in the payment provider's console in MVP (PRD Section 10 open question).
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Coupon codes</h2>
+          <div style="margin-bottom:12px;"><button class="btn btn-primary btn-sm wf-action">+ Create coupon</button></div>
+          <table>
+            <thead>
+              <tr><th>Code</th><th>Type</th><th>Value</th><th>Applies to</th><th>Expiry</th><th class="num">Redemptions</th><th>Status</th><th></th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><b>LAUNCH20</b></td><td>Percent, first cycle</td><td class="num">20%</td>
+                <td><span class="chip c-plan">Pro</span></td><td>31 Aug 2026</td><td class="num">84 / 500</td>
+                <td><span class="chip c-active">Active</span></td>
+                <td><button class="btn btn-outline btn-sm wf-action">Disable</button></td>
+              </tr>
+              <tr>
+                <td><b>FEST100</b></td><td>Flat, first cycle</td><td class="num">Rs 100</td>
+                <td><span class="chip c-plan">Pro</span> <span class="chip c-plan">Growth</span></td><td>15 Sep 2026</td><td class="num">12 / 200</td>
+                <td><span class="chip c-active">Active</span></td>
+                <td><button class="btn btn-outline btn-sm wf-action">Disable</button></td>
+              </tr>
+              <tr>
+                <td><b>PILOT50</b></td><td>Percent, recurring</td><td class="num">50%</td>
+                <td><span class="chip c-plan">Growth</span></td><td>30 Jun 2026</td><td class="num">25 / 25</td>
+                <td><span class="chip c-banned">Expired</span></td>
+                <td></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ================= ANNOUNCEMENTS ================= -->
+      <section class="tab" id="tab-announcements">
+        <div class="panel">
+          <h2>Compose broadcast announcement</h2>
+          <div class="form-grid">
+            <div>
+              <div class="form-row">
+                <label class="fl" for="an-title">Title</label>
+                <input type="text" id="an-title" placeholder="e.g. GST export now available on Pro">
+              </div>
+              <div class="form-row">
+                <label class="fl" for="an-body">Message</label>
+                <textarea id="an-body" placeholder="Shown as an in-app banner (rendering per PRD Section 4)…"></textarea>
+              </div>
+              <div class="form-row">
+                <label class="fl">Delivery channel</label>
+                <div class="checks">
+                  <label><input type="checkbox" checked disabled> In-app banner (always)</label>
+                  <label><input type="checkbox"> FCM push (optional)</label>
+                </div>
+              </div>
+            </div>
+            <div>
+              <div class="form-row">
+                <label class="fl">Target plans</label>
+                <div class="checks">
+                  <label><input type="checkbox" checked> Free</label>
+                  <label><input type="checkbox" checked> Pro</label>
+                  <label><input type="checkbox" checked> Growth</label>
+                </div>
+              </div>
+              <div class="form-row">
+                <label class="fl">Target business types</label>
+                <div class="checks">
+                  <label><input type="checkbox" checked> Printing &amp; Custom Jobs</label>
+                  <label><input type="checkbox" checked> Kirana / Grocery</label>
+                  <label><input type="checkbox" checked> Pharmacy</label>
+                  <label><input type="checkbox" checked> Fast Food / QSR</label>
+                  <label><input type="checkbox" checked> Other Services</label>
+                </div>
+              </div>
+              <div class="form-row">
+                <label class="fl">Schedule</label>
+                <div class="checks" style="margin-bottom:8px;">
+                  <label><input type="radio" name="an-when" checked> Send immediately</label>
+                  <label><input type="radio" name="an-when"> Schedule for:</label>
+                </div>
+                <input type="datetime-local" value="2026-08-01T09:00">
+              </div>
+              <button class="btn btn-primary wf-action">Send announcement</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Send log</h2>
+          <table>
+            <thead>
+              <tr><th>Sent</th><th>Title</th><th>Target</th><th>Channels</th><th class="num">Reach</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>29 Jul 2026, 10:00</td><td>Scheduled maintenance Sunday 2–3 AM</td>
+                <td>All plans · All types</td><td>Banner + push</td><td class="num">2,148 tenants</td>
+                <td><span class="chip c-active">Sent</span></td>
+              </tr>
+              <tr>
+                <td>21 Jul 2026, 09:30</td><td>New: near-expiry report on web panel</td>
+                <td>All plans · Pharmacy</td><td>Banner</td><td class="num">312 tenants</td>
+                <td><span class="chip c-active">Sent</span></td>
+              </tr>
+              <tr>
+                <td>01 Aug 2026, 09:00</td><td>Pro annual = 2 months free</td>
+                <td>Free · All types</td><td>Banner + push</td><td class="num">~1,600 tenants</td>
+                <td><span class="chip c-trial">Scheduled</span></td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="footnote">Full send log retained; targeting by plan and/or business type per FR-5.23.</div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<!-- ============ Tenant detail drawer ============ -->
+<div class="drawer-overlay" id="drawer-overlay"></div>
+<aside class="drawer" id="drawer" aria-label="Tenant detail">
+  <div class="drawer-head">
+    <div>
+      <h3 id="d-name">—</h3>
+      <div class="sub" id="d-sub">—</div>
+    </div>
+    <button class="drawer-close" id="drawer-close" aria-label="Close drawer">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div class="dsec">
+      <h4>Profile</h4>
+      <div class="kv"><span class="k">Phone</span><span class="v" id="d-phone">—</span></div>
+      <div class="kv"><span class="k">City</span><span class="v" id="d-city">—</span></div>
+      <div class="kv"><span class="k">GSTIN</span><span class="v" id="d-gstin">—</span></div>
+      <div class="kv"><span class="k">Business type</span><span class="v" id="d-type">—</span></div>
+      <div class="kv"><span class="k">Onboarded</span><span class="v" id="d-joined">—</span></div>
+      <div class="kv" style="align-items:flex-start;"><span class="k">Enabled modules</span></div>
+      <div class="modchips" id="d-modules"></div>
+    </div>
+    <div class="dsec">
+      <h4>Usage stats</h4>
+      <div class="usage-grid">
+        <div class="usage-cell"><div class="k">Bills/day (7d avg)</div><div class="v" id="d-billsday">—</div></div>
+        <div class="usage-cell"><div class="k">Bills this month</div><div class="v" id="d-billsmonth">—</div></div>
+        <div class="usage-cell"><div class="k">Active devices</div><div class="v" id="d-devices">—</div></div>
+        <div class="usage-cell"><div class="k">Last sync</div><div class="v" id="d-lastsync">—</div></div>
+        <div class="usage-cell"><div class="k">Storage used</div><div class="v" id="d-storage">—</div></div>
+        <div class="usage-cell"><div class="k">Tracking scans/day</div><div class="v" id="d-scans">—</div></div>
+      </div>
+    </div>
+    <div class="dsec">
+      <h4>Subscription</h4>
+      <div class="kv"><span class="k">Plan</span><span class="v" id="d-plan">—</span></div>
+      <div class="kv"><span class="k">State</span><span class="v" id="d-substate">—</span></div>
+      <div class="kv"><span class="k">Current period ends</span><span class="v" id="d-period">—</span></div>
+      <div class="kv" style="align-items:flex-start; margin-top:4px;"><span class="k">History</span></div>
+      <ul class="history" id="d-history"></ul>
+    </div>
+  </div>
+  <div class="drawer-actions">
+    <button class="btn btn-outline wf-action">Extend / comp plan…</button>
+    <button class="btn btn-primary wf-action">Impersonate (view as tenant)</button>
+    <div class="warn-note">
+      <b>Audit-log warning:</b> impersonation is strictly <b>read-only</b>, requires a mandatory reason,
+      shows a persistent "IMPERSONATING {shop} — read-only" banner, auto-expires after 30 minutes,
+      and logs start/end plus every page viewed (admin id, tenant id, reason, timestamps) — FR-5.20.
+    </div>
+    <button class="btn btn-danger wf-action">Disable tenant…</button>
+    <div class="danger-note">
+      Opens a choice of <b>Suspend</b> (reversible; API blocked, tracking pages stay live) or
+      <b>Ban</b> (Owner-only, reason required; tracking pages return not-found). Both audit-logged — FR-5.24.
+    </div>
+  </div>
+</aside>
+
+<div id="toast">Wireframe only — action not implemented</div>
+
+<script>
+/* =========================================================================
+   Sample tenant data (wireframe). Status ∈ active/trial/suspended/banned
+   (FR-5.16); subscription state ∈ trialing/active/past_due/suspended/
+   cancelled (PRD Section 8.3).
+   ========================================================================= */
+var TENANTS = [
+  {
+    shop: "Sharma Printers", code: "PRNT", phone: "+91 98220 12345", city: "Pune",
+    gstin: "27ABCDE1234F1Z5", type: "Printing & Custom Jobs", plan: "Pro", planBase: "Pro",
+    status: "active", subState: "active", billsDay: 38, billsMonth: 912, devices: 1,
+    lastSync: "6 min ago", storage: "412 MB", scansDay: 64, periodEnd: "14 Aug 2026", joined: "02 Mar 2026",
+    modules: ["CUSTOM_ORDER", "QUICK_SALE", "CATALOG"],
+    history: ["02 Mar 2026 — 14-day Pro trial started", "16 Mar 2026 — Converted to Pro monthly (Rs 199)", "14 Jul 2026 — Renewal charged (Rs 199)"]
+  },
+  {
+    shop: "Gupta Kirana Store", code: "GKIR", phone: "+91 98111 40021", city: "Delhi",
+    gstin: "—", type: "Kirana / Grocery", plan: "Free", planBase: "Free",
+    status: "active", subState: "active (Free)", billsDay: 21, billsMonth: 86, devices: 1,
+    lastSync: "41 min ago", storage: "58 MB", scansDay: 3, periodEnd: "— (Free plan)", joined: "11 Apr 2026",
+    modules: ["QUICK_SALE", "CATALOG", "INVENTORY", "CREDIT_LEDGER"],
+    history: ["11 Apr 2026 — 14-day Pro trial started", "25 Apr 2026 — Trial expired, dropped to Free"]
+  },
+  {
+    shop: "Wellness Pharmacy", code: "WELL", phone: "+91 90040 77812", city: "Mumbai",
+    gstin: "27PQRSX5678G1Z2", type: "Pharmacy", plan: "Growth", planBase: "Growth",
+    status: "active", subState: "active", billsDay: 112, billsMonth: 2870, devices: 3,
+    lastSync: "2 min ago", storage: "1.9 GB", scansDay: 45, periodEnd: "03 Aug 2026", joined: "19 Jan 2026",
+    modules: ["QUICK_SALE", "CATALOG", "INVENTORY", "BATCH_EXPIRY", "CREDIT_LEDGER"],
+    history: ["19 Jan 2026 — 14-day Pro trial started", "27 Jan 2026 — Upgraded to Growth annual (Rs 3,999)", "12 May 2026 — Added device #3"]
+  },
+  {
+    shop: "Raju Fast Food", code: "RJFF", phone: "+91 98670 22910", city: "Nagpur",
+    gstin: "—", type: "Fast Food / QSR", plan: "Pro (trial)", planBase: "Pro",
+    status: "trial", subState: "trialing — ends 09 Aug 2026", billsDay: 74, billsMonth: 401, devices: 1,
+    lastSync: "14 min ago", storage: "22 MB", scansDay: 19, periodEnd: "09 Aug 2026 (trial end)", joined: "26 Jul 2026",
+    modules: ["QUICK_SALE", "CATALOG", "KOT_TOKEN"],
+    history: ["26 Jul 2026 — 14-day Pro trial started (no mandate)"]
+  },
+  {
+    shop: "Perfect Tailors", code: "PTLR", phone: "+91 99230 55678", city: "Pune",
+    gstin: "—", type: "Other Services", plan: "Free", planBase: "Free",
+    status: "active", subState: "active (Free)", billsDay: 4, billsMonth: 63, devices: 1,
+    lastSync: "3 h ago", storage: "310 MB", scansDay: 11, periodEnd: "— (Free plan)", joined: "08 May 2026",
+    modules: ["CUSTOM_ORDER", "CATALOG"],
+    history: ["08 May 2026 — 14-day Pro trial started", "22 May 2026 — Trial expired, dropped to Free"]
+  },
+  {
+    shop: "Anand Medical Stores", code: "ANMD", phone: "+91 94220 88431", city: "Nashik",
+    gstin: "27LMNOP9012H1Z8", type: "Pharmacy", plan: "Pro", planBase: "Pro",
+    status: "active", subState: "past_due — grace day 3/7 (dunning)", billsDay: 58, billsMonth: 1522, devices: 1,
+    lastSync: "22 min ago", storage: "980 MB", scansDay: 8, periodEnd: "28 Jul 2026 + 7-day grace", joined: "14 Feb 2026",
+    modules: ["QUICK_SALE", "CATALOG", "INVENTORY", "BATCH_EXPIRY", "CREDIT_LEDGER"],
+    history: ["14 Feb 2026 — 14-day Pro trial started", "28 Feb 2026 — Converted to Pro monthly (Rs 199)", "28 Jul 2026 — Renewal failed (UPI Autopay), entered past_due"]
+  },
+  {
+    shop: "City Mobile Repair", code: "CMRP", phone: "+91 98500 11234", city: "Aurangabad",
+    gstin: "—", type: "Other Services", plan: "Pro", planBase: "Pro",
+    status: "suspended", subState: "suspended — reverted to Free entitlements", billsDay: 0, billsMonth: 12, devices: 1,
+    lastSync: "9 days ago", storage: "144 MB", scansDay: 1, periodEnd: "12 Jul 2026 (lapsed)", joined: "30 Mar 2026",
+    modules: ["CUSTOM_ORDER", "CATALOG"],
+    history: ["30 Mar 2026 — 14-day Pro trial started", "13 Apr 2026 — Converted to Pro monthly (Rs 199)", "12 Jul 2026 — Renewal failed; grace expired 19 Jul", "20 Jul 2026 — Suspended (Free entitlements; data retained)"]
+  },
+  {
+    shop: "Bansal Print House", code: "BNSL", phone: "+91 93250 66091", city: "Indore",
+    gstin: "—", type: "Printing & Custom Jobs", plan: "Free", planBase: "Free",
+    status: "banned", subState: "cancelled", billsDay: 0, billsMonth: 0, devices: 0,
+    lastSync: "34 days ago", storage: "77 MB", scansDay: 0, periodEnd: "—", joined: "05 Jun 2026",
+    modules: ["CUSTOM_ORDER", "QUICK_SALE", "CATALOG"],
+    history: ["05 Jun 2026 — 14-day Pro trial started", "19 Jun 2026 — Trial expired, dropped to Free", "27 Jun 2026 — BANNED by owner (fraudulent activity; reason on audit log). Tracking pages return not-found (FR-5.24)"]
+  }
+];
+
+var STATUS_CHIP = { active: "c-active", trial: "c-trial", suspended: "c-suspended", banned: "c-banned" };
+
+/* ---------- Tenant table + filters ---------- */
+function renderTenants() {
+  var q = document.getElementById("t-search").value.trim().toLowerCase();
+  var plan = document.getElementById("t-plan").value;
+  var type = document.getElementById("t-type").value;
+  var status = document.getElementById("t-status").value;
+
+  var tbody = document.getElementById("tenant-rows");
+  tbody.innerHTML = "";
+  var shown = 0;
+
+  for (var i = 0; i < TENANTS.length; i++) {
+    var t = TENANTS[i];
+    var hay = (t.shop + " " + t.code + " " + t.phone).toLowerCase();
+    if (q && hay.indexOf(q) === -1) continue;
+    if (plan && t.planBase !== plan) continue;
+    if (type && t.type !== type.replace("&amp;", "&")) continue;
+    if (status && t.status !== status) continue;
+    shown++;
+
+    var tr = document.createElement("tr");
+    tr.className = "rowlink";
+    tr.setAttribute("data-idx", i);
+    tr.innerHTML =
+        "<td><b>" + t.shop + "</b></td>"
+      + '<td class="num">' + t.code + "</td>"
+      + '<td class="num">' + t.phone + "</td>"
+      + "<td>" + t.type + "</td>"
+      + '<td><span class="chip c-plan">' + t.plan + "</span></td>"
+      + '<td><span class="chip ' + STATUS_CHIP[t.status] + '">' + t.status + "</span></td>"
+      + '<td class="num">' + t.billsDay + "</td>"
+      + "<td>" + t.lastSync + "</td>"
+      + '<td><button class="btn btn-outline btn-sm">View</button></td>';
+    tr.addEventListener("click", (function (idx) {
+      return function () { openDrawer(idx); };
+    })(i));
+    tbody.appendChild(tr);
+  }
+  document.getElementById("tenant-count").textContent =
+    "Showing " + shown + " of " + TENANTS.length + " tenants. Click a row to open the tenant detail drawer.";
+}
+
+["t-search", "t-plan", "t-type", "t-status"].forEach(function (id) {
+  var el = document.getElementById(id);
+  el.addEventListener("input", renderTenants);
+  el.addEventListener("change", renderTenants);
+});
+
+/* ---------- Drawer ---------- */
+function setText(id, v) { document.getElementById(id).textContent = v; }
+
+function openDrawer(idx) {
+  var t = TENANTS[idx];
+  setText("d-name", t.shop);
+  document.getElementById("d-sub").innerHTML =
+    'SHOPCODE <b>' + t.code + "</b> · " + '<span class="chip ' + STATUS_CHIP[t.status] + '">' + t.status + "</span>";
+  setText("d-phone", t.phone);
+  setText("d-city", t.city);
+  setText("d-gstin", t.gstin);
+  setText("d-type", t.type);
+  setText("d-joined", t.joined);
+
+  var mods = document.getElementById("d-modules");
+  mods.innerHTML = "";
+  for (var i = 0; i < t.modules.length; i++) {
+    var s = document.createElement("span");
+    s.className = "modchip";
+    s.textContent = t.modules[i];
+    mods.appendChild(s);
+  }
+
+  setText("d-billsday", t.billsDay);
+  setText("d-billsmonth", t.billsMonth);
+  setText("d-devices", t.devices);
+  setText("d-lastsync", t.lastSync);
+  setText("d-storage", t.storage);
+  setText("d-scans", t.scansDay);
+
+  setText("d-plan", t.plan);
+  setText("d-substate", t.subState);
+  setText("d-period", t.periodEnd);
+
+  var hist = document.getElementById("d-history");
+  hist.innerHTML = "";
+  for (var j = 0; j < t.history.length; j++) {
+    var li = document.createElement("li");
+    li.textContent = t.history[j];
+    hist.appendChild(li);
+  }
+
+  document.body.classList.add("drawer-open");
+}
+
+function closeDrawer() { document.body.classList.remove("drawer-open"); }
+document.getElementById("drawer-close").addEventListener("click", closeDrawer);
+document.getElementById("drawer-overlay").addEventListener("click", closeDrawer);
+document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeDrawer(); });
+
+/* ---------- Tab switching ---------- */
+var TAB_TITLES = {
+  tenants: "Tenants",
+  revenue: "Revenue",
+  metrics: "Platform Metrics",
+  subscriptions: "Subscriptions",
+  announcements: "Announcements"
+};
+var navItems = document.querySelectorAll(".nav-item");
+for (var n = 0; n < navItems.length; n++) {
+  navItems[n].addEventListener("click", function () {
+    var tab = this.getAttribute("data-tab");
+    for (var k = 0; k < navItems.length; k++) navItems[k].classList.remove("active");
+    this.classList.add("active");
+    var sections = document.querySelectorAll(".tab");
+    for (var s = 0; s < sections.length; s++) sections[s].classList.remove("active");
+    document.getElementById("tab-" + tab).classList.add("active");
+    document.getElementById("tab-title").textContent = TAB_TITLES[tab];
+    closeDrawer();
+  });
+}
+
+/* ---------- Wireframe-only action toast ---------- */
+var toastTimer = null;
+document.addEventListener("click", function (e) {
+  var el = e.target;
+  if (el.classList && el.classList.contains("wf-action")) {
+    e.stopPropagation();
+    var toast = document.getElementById("toast");
+    toast.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toast.classList.remove("show"); }, 1600);
+  }
+}, true);
+
+renderTenants();
+</script>
+</body>
+</html>

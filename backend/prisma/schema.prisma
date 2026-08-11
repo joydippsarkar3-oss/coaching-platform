@@ -1,0 +1,1100 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+
+enum Role {
+  SUPER_ADMIN
+  HO_STAFF
+  CENTER_OWNER
+  CENTER_STAFF
+  TEACHER
+  STUDENT
+  PARENT
+}
+
+enum CenterStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING
+}
+
+enum AgreementStatus {
+  DRAFT
+  ACTIVE
+  EXPIRED
+  TERMINATED
+}
+
+enum CourseStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum BatchStatus {
+  UPCOMING
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  DROPPED
+  TRANSFERRED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CASH
+  UPI
+  NEFT
+  CHEQUE
+  CARD
+  WALLET
+}
+
+enum InstallmentStatus {
+  PENDING
+  PAID
+  OVERDUE
+  WAIVED
+}
+
+enum ExamStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  EVALUATED
+  PASSED
+  FAILED
+}
+
+enum CertificateStatus {
+  REQUESTED
+  ISSUED
+  REVOKED
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  READ
+}
+
+enum NotificationChannel {
+  SMS
+  EMAIL
+  WHATSAPP
+  PUSH
+  IN_APP
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum LedgerEntryType {
+  DEBIT
+  CREDIT
+}
+
+enum WalletTxnType {
+  CREDIT
+  DEBIT
+  REFUND
+}
+
+enum ContentType {
+  VIDEO
+  PDF
+  DOCUMENT
+  QUIZ
+  LINK
+}
+
+// ─────────────────────────────────────────────
+// TERRITORY & CENTER
+// ─────────────────────────────────────────────
+
+model Territory {
+  id        String   @id @default(uuid())
+  name      String
+  state     String
+  region    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  centers   Center[]
+}
+
+model Center {
+  id          String       @id @default(uuid())
+  code        String       @unique
+  name        String
+  ownerName   String
+  email       String       @unique
+  phone       String
+  address     String
+  city        String
+  state       String
+  pincode     String
+  status      CenterStatus @default(PENDING)
+  territoryId String?
+  logoUrl     String?
+  lastReceiptSeq Int          @default(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  territory        Territory?       @relation(fields: [territoryId], references: [id])
+  agreements       Agreement[]
+  users            User[]
+  students         Student[]
+  batches          Batch[]
+  enrollments      Enrollment[]
+  centerCourses    CenterCourse[]
+  feePlans         FeePlan[]
+  wallets          Wallet[]
+  enquiries        Enquiry[]
+  expenses         Expense[]
+  inventoryItems   InventoryItem[]
+  whatsappWindows  WhatsappWindow[]
+  tickets          Ticket[]
+  notifications    Notification[]
+  certificates     Certificate[]
+  exams            Exam[]
+  roleAssignments  RoleAssignment[]
+
+  @@index([status])
+  @@index([territoryId])
+}
+
+model Agreement {
+  id          String          @id @default(uuid())
+  centerId    String
+  startDate   DateTime
+  endDate     DateTime
+  royaltyPct  Int             // basis points e.g. 1000 = 10%
+  status      AgreementStatus @default(DRAFT)
+  documentUrl String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  center Center @relation(fields: [centerId], references: [id])
+
+  @@index([centerId])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────
+// USERS & RBAC
+// ─────────────────────────────────────────────
+
+model User {
+  id           String    @id @default(uuid())
+  centerId     String?
+  name         String
+  email        String?   @unique
+  phone        String    @unique
+  passwordHash String?
+  totpSecret   String?
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  center          Center?          @relation(fields: [centerId], references: [id])
+  roleAssignments RoleAssignment[]
+  otpCodes        OtpCode[]
+  auditLogs       AuditLog[]       @relation("UserAuditLogs")
+  notifications   Notification[]
+
+  @@index([centerId])
+  @@index([phone])
+  @@index([email])
+}
+
+model OtpCode {
+  id        String   @id @default(uuid())
+  userId    String
+  code      String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model RoleAssignment {
+  id        String   @id @default(uuid())
+  userId    String
+  centerId  String?
+  role      Role
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User    @relation(fields: [userId], references: [id])
+  center Center? @relation(fields: [centerId], references: [id])
+
+  @@unique([userId, centerId, role])
+  @@index([centerId])
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────
+// STUDENTS
+// ─────────────────────────────────────────────
+
+model Student {
+  id           String    @id @default(uuid())
+  centerId     String?
+  name         String
+  email        String?
+  phone        String
+  dob          DateTime?
+  gender       String?
+  address      String?
+  photoUrl     String?
+  guardianName String?
+  guardianPhone String?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  center      Center?     @relation(fields: [centerId], references: [id])
+  consents    Consent[]
+  enrollments Enrollment[]
+  referrals   Referral[]  @relation("StudentReferrals")
+  referredBy  Referral[]  @relation("ReferredStudents")
+  wallets     Wallet[]
+  certificates Certificate[]
+  examAttempts ExamAttempt[]
+
+  @@index([centerId])
+  @@index([phone])
+}
+
+model Consent {
+  id        String   @id @default(uuid())
+  centerId  String?
+  studentId String
+  type      String   // e.g. "DATA_SHARING", "MARKETING", "TERMS"
+  granted   Boolean  @default(false)
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  student Student @relation(fields: [studentId], references: [id])
+
+  @@index([centerId])
+  @@index([studentId])
+}
+
+// ─────────────────────────────────────────────
+// COURSES & CURRICULUM
+// ─────────────────────────────────────────────
+
+model Course {
+  id           String       @id @default(uuid())
+  centerId     String?      // null = HO global
+  code         String       @unique
+  name         String
+  description  String?
+  durationDays Int
+  feePaise     Int          // base fee in paise
+  status       CourseStatus @default(DRAFT)
+  thumbnailUrl String?
+  syllabus     Json?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  centerCourses  CenterCourse[]
+  batches        Batch[]
+  enrollments    Enrollment[]
+  contentItems   ContentItem[]
+  questionBanks  QuestionBank[]
+  certificates   Certificate[]
+
+  @@index([centerId])
+  @@index([status])
+}
+
+model CenterCourse {
+  id           String   @id @default(uuid())
+  centerId     String
+  courseId     String
+  customFee    Int?     // override fee in paise
+  isActive     Boolean  @default(true)
+  grantedAt    DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  center Center @relation(fields: [centerId], references: [id])
+  course Course @relation(fields: [courseId], references: [id])
+
+  @@unique([centerId, courseId])
+  @@index([centerId])
+}
+
+model Batch {
+  id          String      @id @default(uuid())
+  centerId    String?
+  courseId    String
+  name        String
+  startDate   DateTime
+  endDate     DateTime
+  capacity    Int         @default(30)
+  teacherId   String?
+  status      BatchStatus @default(UPCOMING)
+  timings     String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  center      Center?      @relation(fields: [centerId], references: [id])
+  course      Course       @relation(fields: [courseId], references: [id])
+  enrollments Enrollment[]
+
+  @@index([centerId])
+  @@index([courseId])
+}
+
+model ContentItem {
+  id          String      @id @default(uuid())
+  centerId    String?
+  courseId    String
+  title       String
+  type        ContentType
+  url         String?
+  order       Int         @default(0)
+  durationMin Int?
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  course Course @relation(fields: [courseId], references: [id])
+
+  @@index([centerId])
+  @@index([courseId])
+}
+
+// ─────────────────────────────────────────────
+// ENROLLMENTS
+// ─────────────────────────────────────────────
+
+model Enrollment {
+  id         String           @id @default(uuid())
+  centerId   String?
+  studentId  String
+  courseId   String
+  batchId    String?
+  status     EnrollmentStatus @default(ACTIVE)
+  enrolledAt DateTime         @default(now())
+  completedAt DateTime?
+  totalFeePaise Int           @default(0)
+  paidFeePaise  Int           @default(0)
+  feeStatus     String        @default("pending") // pending|partial|paid|overdue
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  center       Center?       @relation(fields: [centerId], references: [id])
+  student      Student       @relation(fields: [studentId], references: [id])
+  course       Course        @relation(fields: [courseId], references: [id])
+  batch        Batch?        @relation(fields: [batchId], references: [id])
+  installments Installment[]
+  ledgerEntries LedgerEntry[]
+
+  @@index([centerId])
+  @@index([studentId])
+  @@index([courseId])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────
+// FEES
+// ─────────────────────────────────────────────
+
+model FeePlan {
+  id              String   @id @default(uuid())
+  centerId        String?
+  name            String
+  totalAmountPaise Int
+  installmentCount Int     @default(1)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  center       Center?       @relation(fields: [centerId], references: [id])
+  installments Installment[]
+
+  @@index([centerId])
+}
+
+model Installment {
+  id           String            @id @default(uuid())
+  centerId     String?
+  enrollmentId String
+  feePlanId    String?
+  dueDate      DateTime
+  amountPaise  Int
+  status       InstallmentStatus @default(PENDING)
+  paidAt       DateTime?
+  reconciledAt DateTime?
+  reconciled   Boolean           @default(false)
+  partial      Boolean           @default(false)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id])
+  feePlan    FeePlan?   @relation(fields: [feePlanId], references: [id])
+  payments   Payment[]
+
+  @@index([centerId])
+  @@index([enrollmentId])
+  @@index([status])
+}
+
+model Payment {
+  id             String        @id @default(uuid())
+  centerId       String?
+  installmentId  String
+  amountPaise    Int
+  method         PaymentMethod
+  status         PaymentStatus @default(PENDING)
+  gatewayRef     String?
+  gatewayPayload Json?
+  collectedBy    String?
+  paidAt         DateTime?
+  costPaise      Int           @default(0) // gateway fee if known
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  installment   Installment    @relation(fields: [installmentId], references: [id])
+  settlement    Settlement?
+  ledgerEntries LedgerEntry[]
+  walletTxns    WalletTxn[]
+
+  @@index([centerId])
+  @@index([installmentId])
+  @@index([status])
+}
+
+model Settlement {
+  id          String   @id @default(uuid())
+  centerId    String?
+  paymentId   String   @unique
+  amountPaise Int
+  settledAt   DateTime
+  reference   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  payment Payment @relation(fields: [paymentId], references: [id])
+
+  @@index([centerId])
+}
+
+model LedgerEntry {
+  id           String          @id @default(uuid())
+  centerId     String?
+  enrollmentId String?
+  paymentId    String?
+  type         LedgerEntryType
+  amountPaise  Int
+  description  String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  enrollment Enrollment? @relation(fields: [enrollmentId], references: [id])
+  payment    Payment?    @relation(fields: [paymentId], references: [id])
+
+  @@index([centerId])
+  @@index([enrollmentId])
+}
+
+model Wallet {
+  id          String   @id @default(uuid())
+  centerId    String?
+  studentId   String?
+  balancePaise Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  center    Center?     @relation(fields: [centerId], references: [id])
+  student   Student?    @relation(fields: [studentId], references: [id])
+  txns      WalletTxn[]
+
+  @@index([centerId])
+  @@index([studentId])
+}
+
+model WalletTxn {
+  id          String        @id @default(uuid())
+  centerId    String?
+  walletId    String
+  paymentId   String?
+  type        WalletTxnType
+  amountPaise Int
+  description String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  wallet  Wallet   @relation(fields: [walletId], references: [id])
+  payment Payment? @relation(fields: [paymentId], references: [id])
+
+  @@index([centerId])
+  @@index([walletId])
+}
+
+// ─────────────────────────────────────────────
+// REFERRALS & CRM
+// ─────────────────────────────────────────────
+
+model Referral {
+  id           String   @id @default(uuid())
+  centerId     String?
+  referrerId   String
+  referredId   String
+  rewardPaise  Int      @default(0)
+  rewardPaid   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  referrer Student @relation("StudentReferrals", fields: [referrerId], references: [id])
+  referred Student @relation("ReferredStudents", fields: [referredId], references: [id])
+
+  @@index([centerId])
+  @@index([referrerId])
+}
+
+model Enquiry {
+  id          String   @id @default(uuid())
+  centerId    String?
+  name        String
+  phone       String
+  email       String?
+  courseId    String?
+  source      String?
+  notes       String?
+  assignedTo  String?
+  isConverted Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  center    Center?    @relation(fields: [centerId], references: [id])
+  followUps FollowUp[]
+
+  @@index([centerId])
+  @@index([isConverted])
+}
+
+model FollowUp {
+  id        String   @id @default(uuid())
+  centerId  String?
+  enquiryId String
+  notes     String
+  doneBy    String?
+  doneAt    DateTime @default(now())
+  nextFollowUpAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  enquiry Enquiry @relation(fields: [enquiryId], references: [id])
+
+  @@index([centerId])
+  @@index([enquiryId])
+}
+
+// ─────────────────────────────────────────────
+// EXAMS
+// ─────────────────────────────────────────────
+
+model QuestionBank {
+  id        String   @id @default(uuid())
+  centerId  String?
+  courseId  String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  course    Course     @relation(fields: [courseId], references: [id])
+  questions Question[]
+
+  @@index([centerId])
+  @@index([courseId])
+}
+
+model Question {
+  id             String   @id @default(uuid())
+  centerId       String?
+  questionBankId String
+  text           String
+  options        Json     // [{key:"A",text:"..."}, ...]
+  correctKey     String
+  explanation    String?
+  marks          Int      @default(1)
+  difficulty     String   @default("medium") // easy|medium|hard
+  negativeMarks  Decimal? @db.Decimal(10,2)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  questionBank QuestionBank  @relation(fields: [questionBankId], references: [id])
+  examAnswers  ExamAnswer[]
+
+  @@index([centerId])
+  @@index([questionBankId])
+}
+
+model Exam {
+  id             String     @id @default(uuid())
+  centerId       String?
+  courseId       String?
+  title          String
+  durationMin    Int        @default(60)
+  totalMarks     Int
+  passingMarks   Int
+  shuffleQuestions Boolean  @default(true)
+  status         ExamStatus @default(DRAFT)
+  startsAt       DateTime?
+  endsAt         DateTime?
+  blueprint      Json?                    // [{topicId, difficulty, count}]
+  negativeMarksRatio Decimal?             @db.Decimal(5,2)  // e.g. 0.25
+  anticheatLevel String     @default("none")   // none|basic|strict
+  resultPolicy   String     @default("instant") // instant|moderated
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  center   Center?       @relation(fields: [centerId], references: [id])
+  attempts ExamAttempt[]
+
+  @@index([centerId])
+  @@index([courseId])
+}
+
+model ExamAttempt {
+  id          String        @id @default(uuid())
+  centerId    String?
+  examId      String
+  studentId   String
+  status      AttemptStatus @default(IN_PROGRESS)
+  startedAt   DateTime      @default(now())
+  submittedAt DateTime?
+  score       Int?
+  passed      Boolean?
+  paperSnapshot    Json?    // {questionIds[], optionOrders}
+  questionResults  Json?    // per-question scoring results
+  rank             Int?
+  markedForReview  Json?    @default("[]") // questionId[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  exam    Exam         @relation(fields: [examId], references: [id])
+  student Student      @relation(fields: [studentId], references: [id])
+  answers ExamAnswer[]
+
+  deviceFingerprint String?  // SHA-256 of navigator fingerprint for anti-cheat binding
+
+  @@index([centerId])
+  @@index([examId])
+  @@index([studentId])
+}
+
+model ExamAnswer {
+  id          String   @id @default(uuid())
+  centerId    String?
+  attemptId   String
+  questionId  String
+  selectedKey String
+  isCorrect   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  markedForReview Boolean  @default(false)
+  negativeMarks   Decimal? @db.Decimal(10,2)
+
+  attempt  ExamAttempt @relation(fields: [attemptId], references: [id])
+  question Question    @relation(fields: [questionId], references: [id])
+
+  @@index([centerId])
+  @@index([attemptId])
+}
+
+// ─────────────────────────────────────────────
+// CERTIFICATES
+// ─────────────────────────────────────────────
+
+model CertificateTemplate {
+  id          String   @id @default(uuid())
+  centerId    String?
+  courseId    String?
+  name        String
+  htmlTemplate String
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  certificates Certificate[]
+
+  @@index([centerId])
+}
+
+model Certificate {
+  id           String            @id @default(uuid())
+  centerId     String?
+  studentId    String
+  courseId     String
+  templateId   String?
+  certificateNo String           @unique
+  issuedAt     DateTime?
+  status       CertificateStatus @default(REQUESTED)
+  fileUrl      String?
+  enrollmentId String?
+  grade        String?
+  signed       Boolean           @default(false)
+  pdfStatus    String            @default("pending") // pending|generated|failed
+  revokeReason String?
+  revokedAt    DateTime?
+  revokedBy    String?           // userId
+  requestedBy  String?           // userId
+  sha256       String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  center     Center?              @relation(fields: [centerId], references: [id])
+  student    Student              @relation(fields: [studentId], references: [id])
+  course     Course               @relation(fields: [courseId], references: [id])
+  template   CertificateTemplate? @relation(fields: [templateId], references: [id])
+  verifications VerificationLog[]
+
+  @@index([centerId])
+  @@index([studentId])
+  @@index([certificateNo])
+}
+
+model VerificationLog {
+  id            String   @id @default(uuid())
+  centerId      String?
+  certificateId String
+  verifiedBy    String?
+  ipAddress     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  certificate Certificate @relation(fields: [certificateId], references: [id])
+
+  @@index([centerId])
+  @@index([certificateId])
+}
+
+// ─────────────────────────────────────────────
+// NOTIFICATIONS & JOURNEYS
+// ─────────────────────────────────────────────
+
+model MessageTemplate {
+  id        String              @id @default(uuid())
+  centerId  String?
+  name      String
+  channel   NotificationChannel
+  subject   String?
+  body      String
+  variables Json?               // ["{{name}}", "{{course}}"]
+  isActive  Boolean             @default(true)
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  notifications Notification[]
+
+  @@index([centerId])
+}
+
+model Notification {
+  id         String              @id @default(uuid())
+  centerId   String?
+  userId     String?
+  templateId String?
+  channel    NotificationChannel
+  recipient  String
+  subject    String?
+  body       String
+  status     NotificationStatus  @default(PENDING)
+  sentAt     DateTime?
+  readAt     DateTime?
+  isInbound  Boolean             @default(false)
+  costPaise  Int                 @default(0)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  center   Center?          @relation(fields: [centerId], references: [id])
+  user     User?            @relation(fields: [userId], references: [id])
+  template MessageTemplate? @relation(fields: [templateId], references: [id])
+
+  @@index([centerId])
+  @@index([userId])
+  @@index([status])
+}
+
+model Journey {
+  id          String   @id @default(uuid())
+  centerId    String?
+  name        String
+  triggerEvent String
+  steps       Json     // [{delay:0,templateId:"..."}, ...]
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([centerId])
+}
+
+// ─────────────────────────────────────────────
+// EXPENSES & TICKETS
+// ─────────────────────────────────────────────
+
+model Expense {
+  id          String   @id @default(uuid())
+  centerId    String?
+  category    String
+  amountPaise Int
+  description String?
+  receiptUrl  String?
+  recordedBy  String?
+  expensedAt  DateTime
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  center Center? @relation(fields: [centerId], references: [id])
+
+  @@index([centerId])
+  @@index([deletedAt])
+}
+
+model InventoryItem {
+  id           String   @id @default(uuid())
+  centerId     String?
+  name         String
+  sku          String?
+  quantityOnHand Int    @default(0)
+  reorderLevel Int      @default(0)
+  unitCostPaise Int     @default(0)
+  category     String?
+  notes        String?
+  deletedAt    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  center Center? @relation(fields: [centerId], references: [id])
+
+  @@index([centerId])
+  @@index([deletedAt])
+}
+
+model WhatsappWindow {
+  id          String   @id @default(uuid())
+  centerId    String?
+  phone       String
+  openedAt    DateTime @default(now())
+  expiresAt   DateTime
+  lastMsgAt   DateTime?
+  msgCount    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([centerId])
+  @@index([phone])
+  @@index([expiresAt])
+}
+
+model Ticket {
+  id          String         @id @default(uuid())
+  centerId    String?
+  raisedBy    String?
+  assignedTo  String?
+  subject     String
+  description String
+  status      TicketStatus   @default(OPEN)
+  priority    TicketPriority @default(MEDIUM)
+  resolvedAt  DateTime?
+  deletedAt   DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  center   Center?         @relation(fields: [centerId], references: [id])
+  messages TicketMessage[]
+
+  @@index([centerId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model TicketMessage {
+  id        String   @id @default(uuid())
+  ticketId  String
+  authorId  String?
+  body      String
+  isStaff   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ticket Ticket @relation(fields: [ticketId], references: [id])
+
+  @@index([ticketId])
+}
+
+// ─────────────────────────────────────────────
+// TYPING ENGINE
+// ─────────────────────────────────────────────
+
+model TypingPassage {
+  id          String   @id @default(uuid())
+  language    String   // "en" | "hi"
+  difficulty  String   // "easy" | "medium" | "hard"
+  text        String
+  wordCount   Int
+  charCount   Int
+  source      String?
+  status      String   @default("active") // active | archived
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  attempts    TypingAttempt[]
+}
+
+model TypingTest {
+  id              String   @id @default(uuid())
+  centerId        String?
+  courseId        String?
+  title           String
+  language        String   // "en" | "hi"
+  layout          String   // "qwerty" | "remington_gail" | "inscript" | "krutidev010"
+  preset          String?  // "cpct_en" | "cpct_hi" | "ssc_chsl" | "ssc_cgl" | "dest" | "custom"
+  durationSeconds Int
+  passWpmNet      Int?
+  passAccuracy    Float?
+  passageId       String?
+  allowBackspace  Boolean  @default(true)
+  countBackspace  Boolean  @default(true)
+  antiPaste       Boolean  @default(true)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  attempts TypingAttempt[]
+
+  @@index([centerId])
+}
+
+model TypingAttempt {
+  id                String    @id @default(uuid())
+  testId            String?
+  passageId         String
+  studentId         String
+  centerId          String?
+  layout            String
+  language          String
+  durationSeconds   Int
+  startedAt         DateTime
+  completedAt       DateTime?
+  status            String    @default("in_progress") // in_progress | completed | abandoned
+  grossWpm          Float?
+  netWpm            Float?
+  accuracy          Float?
+  totalKeystrokes   Int?
+  correctKeystrokes Int?
+  backspaceCount    Int?
+  errorCount        Int?
+  errorBreakdown    Json?
+  keyHeatmap        Json?
+  certificateId     String?
+
+  passage TypingPassage @relation(fields: [passageId], references: [id])
+  test    TypingTest?   @relation(fields: [testId], references: [id])
+
+  @@index([studentId])
+  @@index([centerId])
+}
+
+// ─────────────────────────────────────────────
+// AUDIT
+// ─────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  centerId   String?
+  userId     String?
+  action     String
+  entity     String
+  entityId   String?
+  oldValue   Json?
+  newValue   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User? @relation("UserAuditLogs", fields: [userId], references: [id])
+
+  @@index([centerId])
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────
+// RLS POLICIES (informational — apply manually)
+// ─────────────────────────────────────────────
+// The following SQL should be applied after migration for row-level security:
+//
+// ALTER TABLE "Center" ENABLE ROW LEVEL SECURITY;
+// CREATE POLICY center_isolation ON "Center"
+//   USING (id = current_setting('app.current_center_id')::uuid
+//          OR current_setting('app.role') = 'SUPER_ADMIN');
+//
+// ALTER TABLE "Student" ENABLE ROW LEVEL SECURITY;
+// CREATE POLICY student_isolation ON "Student"
+//   USING ("centerId" = current_setting('app.current_center_id')::uuid
+//          OR "centerId" IS NULL
+//          OR current_setting('app.role') IN ('SUPER_ADMIN','HO_STAFF'));
+//
+// -- Repeat analogous policies for: Enrollment, Payment, Batch,
+// -- FeePlan, Certificate, Enquiry, Notification, AuditLog, etc.
+// -- Set session vars via: SET LOCAL "app.current_center_id" = '<uuid>';

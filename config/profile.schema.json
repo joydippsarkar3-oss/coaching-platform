@@ -1,0 +1,437 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://config.bizbill.app/schemas/profile.schema.json",
+  "title": "BizBill Business Type Profile",
+  "description": "Server-delivered Business Type Profile (PRD Section 2). A profile is configuration, not code (FR-2.2): it bundles the module preset, home-screen layout, catalog schema hints, a declarative order-level field pack (FR-2.4), display labels for the canonical order states, and the receipt template variant (FR-2.13). Profiles are versioned (FR-2.3); every order stores the profile_id and profile_version it was created under so historical receipts and field packs render consistently after profile updates. The Android app fetches profiles at onboarding, refreshes them on app start when online, and caches the active profile in Room so all profile behavior works fully offline.",
+  "type": "object",
+  "required": [
+    "id",
+    "display_name",
+    "version",
+    "modules",
+    "field_packs",
+    "state_labels",
+    "home_quick_actions",
+    "receipt_template",
+    "catalog_field_hints",
+    "sample_catalog"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional relative or absolute reference to this schema, for editor and CI tooling. Ignored by the app."
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "minLength": 2,
+      "maxLength": 40,
+      "description": "Stable profile identifier (profile_id). Lowercase, hyphen-separated. Never changes across versions; orders reference it together with version (FR-2.3, FR-2.10)."
+    },
+    "display_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 60,
+      "description": "Human-readable name shown on the Business Type picker at onboarding and in Settings (FR-2.9)."
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Monotonically increasing profile_version (FR-2.3). Published versions are immutable; any change ships as version + 1. Orders pin the version they were created under."
+    },
+    "modules": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/module"
+      },
+      "description": "Module preset enabled when this Business Type is selected (FR-2.1, matrix in PRD 2.1). A starting point, not a lock: merchants can toggle individual modules afterwards, subject to plan entitlements (Section 8). DELIVERY and APPOINTMENTS are Phase 2 and appear in no launch preset."
+    },
+    "default_landing": {
+      "type": "string",
+      "enum": ["home", "quick_sale", "new_custom_order", "orders_board"],
+      "default": "home",
+      "description": "Default landing screen after app open. Kirana-style speed-first profiles open directly into the Quick Sale screen (PRD 2.4); job-first profiles open the home tile grid."
+    },
+    "state_labels": {
+      "$ref": "#/$defs/stateLabels"
+    },
+    "in_progress_sub_labels": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 30
+      },
+      "description": "Optional display sub-labels within IN_PROGRESS (PRD 2.7, e.g. Diagnosing/Repairing). Purely cosmetic: canonically IN_PROGRESS remains one state and no extra lifecycle states exist."
+    },
+    "field_packs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/fieldDefinition"
+      },
+      "description": "Declarative order-level custom fields (FR-2.4). The Android form renderer and ESC/POS receipt renderer interpret these generically - no per-niche Kotlin code. Values are stored per order as a JSON blob keyed by field key, alongside profile_id/profile_version (FR-2.10). May be empty for pure quick-sale profiles. Field keys must be unique within a profile (enforced in CI)."
+    },
+    "home_quick_actions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "$ref": "#/$defs/quickAction"
+      },
+      "description": "Ordered quick-action tile set for the home screen (FR-2.11). Merchant re-ordering is allowed on device; this array defines the default order."
+    },
+    "receipt_template": {
+      "type": "string",
+      "pattern": "^rcpt-[a-z0-9]+(-[a-z0-9]+)*-v[0-9]+$",
+      "description": "Identifier of the receipt template variant bundle for this profile (FR-2.13). A bundle covers Customer Copy, Shop Copy and (where applicable) KOT renderings at both 58mm and 80mm per Section 3.6. Selected automatically with the profile, overridable per-merchant (show/hide logo, footer message)."
+    },
+    "catalog_field_hints": {
+      "$ref": "#/$defs/catalogFieldHints"
+    },
+    "sample_catalog": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sampleCatalogItem"
+      },
+      "description": "Starter catalog items seeded once at onboarding. Prices are in rupees (converted to integer paise on import per FR-3.6 note); merchants can edit or delete seeded items freely."
+    },
+    "behavior_flags": {
+      "$ref": "#/$defs/behaviorFlags"
+    }
+  },
+  "$defs": {
+    "module": {
+      "type": "string",
+      "enum": [
+        "CUSTOM_ORDER",
+        "QUICK_SALE",
+        "CATALOG",
+        "INVENTORY",
+        "BATCH_EXPIRY",
+        "KOT_TOKEN",
+        "CREDIT_LEDGER",
+        "DELIVERY",
+        "APPOINTMENTS"
+      ],
+      "description": "Canonical feature module identifier (PRD 2.1)."
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 30
+    },
+    "stateLabels": {
+      "type": "object",
+      "description": "Niche display labels for the canonical order states (PRD Section 2 item 5). Labels never change the underlying lifecycle, which is always CREATED -> IN_PROGRESS -> READY -> COMPLETED with CANCELLED branching off (Section 3.7). CANCELLED label is optional and defaults to 'Cancelled'.",
+      "required": ["CREATED", "IN_PROGRESS", "READY", "COMPLETED"],
+      "additionalProperties": false,
+      "properties": {
+        "CREATED": { "$ref": "#/$defs/label" },
+        "IN_PROGRESS": { "$ref": "#/$defs/label" },
+        "READY": { "$ref": "#/$defs/label" },
+        "COMPLETED": { "$ref": "#/$defs/label" },
+        "CANCELLED": { "$ref": "#/$defs/label" }
+      }
+    },
+    "fieldDefinition": {
+      "type": "object",
+      "description": "One declarative custom field (FR-2.4). Rendered generically by the Android form renderer; printed on the Customer Copy and/or Shop Copy per the show_on_* flags. Fields of type photo are never printed (thermal printers cannot render photos) and must set both show_on_* flags to false.",
+      "required": [
+        "key",
+        "label",
+        "type",
+        "required",
+        "show_on_customer_copy",
+        "show_on_shop_copy"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "minLength": 2,
+          "maxLength": 40,
+          "description": "Storage key in the order's custom_fields JSON blob (FR-2.10). Stable across profile versions for the same logical field."
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40,
+          "description": "Display label on the order form and on printed copies."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "text",
+            "number",
+            "money",
+            "select",
+            "multiselect",
+            "date",
+            "photo",
+            "toggle"
+          ],
+          "description": "Field input type. money values are entered in rupees and stored as integer paise. photo values are object-storage references synced per Section 7."
+        },
+        "required": {
+          "type": "boolean",
+          "description": "Whether the form blocks saving the order until this field is filled."
+        },
+        "options": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "description": "Choice list. Required for select and multiselect; forbidden for all other types."
+        },
+        "show_on_customer_copy": {
+          "type": "boolean",
+          "description": "Print this field's value on the Customer Copy receipt."
+        },
+        "show_on_shop_copy": {
+          "type": "boolean",
+          "description": "Print this field's value in the Shop Copy JOB SPECS block."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": ["select", "multiselect"]
+              }
+            }
+          },
+          "then": {
+            "required": ["options"]
+          },
+          "else": {
+            "not": {
+              "required": ["options"]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "photo"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "show_on_customer_copy": { "const": false },
+              "show_on_shop_copy": { "const": false }
+            }
+          }
+        }
+      ]
+    },
+    "quickAction": {
+      "type": "object",
+      "description": "One home-screen quick-action tile (FR-2.11).",
+      "required": ["id", "label", "screen"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "minLength": 2,
+          "maxLength": 40,
+          "description": "Stable tile identifier, unique within the profile (used to persist merchant re-ordering)."
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24,
+          "description": "Tile caption."
+        },
+        "screen": {
+          "type": "string",
+          "enum": [
+            "new_custom_order",
+            "quick_sale",
+            "scan_qr",
+            "orders_board",
+            "khata",
+            "inventory",
+            "reports",
+            "live_tokens",
+            "catalog",
+            "expiry_report"
+          ],
+          "description": "App screen the tile navigates to. Screens backed by a disabled module are hidden even if listed (module toggles win, FR-2.1)."
+        }
+      }
+    },
+    "unit": {
+      "type": "string",
+      "enum": [
+        "piece",
+        "kg",
+        "g",
+        "L",
+        "ml",
+        "metre",
+        "sqft",
+        "set",
+        "dozen",
+        "pack",
+        "strip",
+        "bottle",
+        "plate",
+        "service",
+        "hour"
+      ],
+      "description": "Catalog unit type. kg/g/L/ml/metre/sqft support decimal quantities (3 places) per FR-3.1."
+    },
+    "gstRate": {
+      "type": "number",
+      "enum": [0, 5, 12, 18, 28],
+      "description": "GST rate percent (FR-3.1). Rendered on receipts only when the merchant has a GSTIN saved (FR-3.4)."
+    },
+    "catalogFieldHints": {
+      "type": "object",
+      "description": "Catalog schema hints (PRD Section 2 item 3): how items/services are modeled for this niche - unit types, variants/add-ons, batch fields, default GST rates.",
+      "required": ["unit_types", "item_noun"],
+      "additionalProperties": false,
+      "properties": {
+        "unit_types": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/unit"
+          },
+          "description": "Unit types offered in the catalog item editor, in display order. First entry is the default."
+        },
+        "allow_decimal_qty": {
+          "type": "boolean",
+          "default": false,
+          "description": "Quantity entry accepts decimals (e.g. 0.250 kg) with price auto-computed from the per-unit rate (PRD 2.4)."
+        },
+        "variants_enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Catalog items support variant groups (e.g. size: half/full), rendered as tap-to-pick chips on the billing screen (PRD 2.6)."
+        },
+        "addons_enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Catalog items support priced add-ons (e.g. extra cheese), rendered as tap-to-pick chips (PRD 2.6)."
+        },
+        "batch_tracking": {
+          "type": "boolean",
+          "default": false,
+          "description": "Stock lots carry batch_no and expiry_date; requires the BATCH_EXPIRY module (FR-2.7)."
+        },
+        "barcode_scan": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show the camera barcode-scan (ZXing) entry point on the billing screen and a barcode field on catalog items (PRD 2.4)."
+        },
+        "default_gst_rates": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/gstRate"
+          },
+          "description": "GST rates surfaced first in the item editor's rate select (e.g. pharma defaults 5/12/18 per PRD 2.5). The full 0/5/12/18/28 set remains reachable."
+        },
+        "item_flags": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": ["SCHEDULE_H", "SCHEDULE_H1"]
+          },
+          "description": "Optional per-item badge flags the catalog editor offers. Schedule H/H1 items show an informational badge on the billing screen and print an 'Rx' marker on the receipt - informational only, no prescription validation is enforced (PRD 2.5, Section 9)."
+        },
+        "item_noun": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20,
+          "description": "Noun used in catalog UI copy for this niche (e.g. Item, Service, Medicine, Dish, Garment)."
+        }
+      }
+    },
+    "sampleCatalogItem": {
+      "type": "object",
+      "description": "Starter catalog item seeded at onboarding. price is in rupees; converted to integer paise on import.",
+      "required": ["name", "price", "gst_rate", "unit"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "price": {
+          "type": "number",
+          "minimum": 0
+        },
+        "gst_rate": {
+          "$ref": "#/$defs/gstRate"
+        },
+        "unit": {
+          "$ref": "#/$defs/unit"
+        }
+      }
+    },
+    "behaviorFlags": {
+      "type": "object",
+      "description": "Profile-scoped behavior switches consumed by the billing engine and printers. All are optional; absent flags fall back to the documented defaults.",
+      "additionalProperties": false,
+      "properties": {
+        "quick_sale_tracking_qr_default": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether quick-sale receipts print the Tracking QR by default. Kirana-style profiles set this false (FR-2.6); the billing screen always offers a per-order toggle, and enabling it switches that order to the custom-order lifecycle instead of instant COMPLETED."
+        },
+        "quick_sale_instant_complete": {
+          "type": "boolean",
+          "default": true,
+          "description": "Quick sales collapse instantly CREATED -> COMPLETED (Section 3.7 forward skip). QSR sets this false so bills default to CREATED ('Preparing') per FR-2.8."
+        },
+        "auto_complete_at_day_close": {
+          "type": "boolean",
+          "default": false,
+          "description": "Orders still READY at day close are auto-completed (trigger AUTO per FR-3.21). Recommended on for QSR to avoid stale orders (PRD 2.6)."
+        },
+        "token_reset_time": {
+          "type": "string",
+          "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+          "description": "Merchant-configurable day-start time (24h HH:MM, local) at which the daily sequential Token No resets. Default 05:00 IST (PRD 2.6). Only meaningful with the KOT_TOKEN module."
+        },
+        "expiry_alert_days": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 365
+          },
+          "description": "Default expiry-alert horizons in days (PRD 2.5 default 90/30), merchant-configurable. Only meaningful with the BATCH_EXPIRY module."
+        },
+        "auto_tag_numbers": {
+          "type": "boolean",
+          "default": false,
+          "description": "Auto-assign a sequential tag number per line item within each order and print the tags on the Shop Copy (Laundry, PRD 2.7)."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,298 @@
+{
+  "nav": {
+    "dashboard": "नेटवर्क डैशबोर्ड",
+    "centers": "केंद्र जीवनचक्र",
+    "catalog": "कैटलॉग प्रशासन",
+    "questionBanks": "प्रश्न बैंक",
+    "examMasters": "परीक्षा मास्टर",
+    "certificates": "प्रमाणपत्र प्राधिकरण",
+    "finance": "नेटवर्क वित्त",
+    "comms": "संचार केंद्र",
+    "users": "उपयोगकर्ता और भूमिकाएं",
+    "audit": "ऑडिट और अनुपालन",
+    "settings": "प्लेटफ़ॉर्म सेटिंग्स",
+    "logout": "लॉगआउट"
+  },
+  "common": {
+    "save": "सहेजें",
+    "cancel": "रद्द करें",
+    "delete": "हटाएं",
+    "edit": "संपादित करें",
+    "create": "बनाएं",
+    "search": "खोजें",
+    "filter": "फ़िल्टर",
+    "export": "CSV निर्यात",
+    "import": "आयात",
+    "approve": "स्वीकृत करें",
+    "reject": "अस्वीकार करें",
+    "confirm": "पुष्टि करें",
+    "loading": "लोड हो रहा है...",
+    "noData": "कोई डेटा नहीं",
+    "actions": "कार्रवाई",
+    "status": "स्थिति",
+    "name": "नाम",
+    "email": "ईमेल",
+    "phone": "फ़ोन",
+    "date": "तारीख",
+    "amount": "राशि",
+    "reason": "कारण",
+    "required": "यह फ़ील्ड आवश्यक है",
+    "submit": "सबमिट करें",
+    "back": "वापस",
+    "next": "अगला",
+    "close": "बंद करें",
+    "view": "देखें",
+    "upload": "अपलोड",
+    "download": "डाउनलोड",
+    "preview": "पूर्वावलोकन",
+    "refresh": "रीफ्रेश",
+    "active": "सक्रिय",
+    "inactive": "निष्क्रिय",
+    "enabled": "सक्षम",
+    "disabled": "अक्षम",
+    "yes": "हाँ",
+    "no": "नहीं",
+    "all": "सभी"
+  },
+  "dashboard": {
+    "title": "नेटवर्क डैशबोर्ड",
+    "kpi": {
+      "activeCenters": "सक्रिय केंद्र",
+      "studentsEnrolled": "इस माह नामांकित छात्र",
+      "networkRevenue": "इस माह नेटवर्क राजस्व",
+      "certificatesIssued": "इस माह जारी प्रमाणपत्र"
+    },
+    "charts": {
+      "monthlyAdmissions": "मासिक प्रवेश (पिछले 6 महीने)",
+      "revenueByCenter": "केंद्र अनुसार राजस्व (शीर्ष 10)"
+    },
+    "leaderboard": {
+      "title": "केंद्र लीडरबोर्ड",
+      "rank": "रैंक",
+      "center": "केंद्र",
+      "city": "शहर",
+      "admissions": "प्रवेश",
+      "revenue": "राजस्व",
+      "collection": "संग्रह %"
+    },
+    "alerts": {
+      "title": "नेटवर्क अलर्ट",
+      "lowCollection": "कम संग्रह दर",
+      "agreementExpiry": "अनुबंध जल्द समाप्त हो रहा है",
+      "pendingCerts": "लंबित प्रमाणपत्र अनुरोध",
+      "kycIncomplete": "KYC अधूरा है"
+    },
+    "mapPlaceholder": "मैप व्यू — VITE_MAPS_API_KEY कॉन्फ़िगर करें"
+  },
+  "centers": {
+    "title": "केंद्र जीवनचक्र",
+    "newApplication": "नया फ्रैंचाइज़ी आवेदन",
+    "provision": "वन-क्लिक प्रोविज़न",
+    "provisionSuccess": "केंद्र सफलतापूर्वक प्रोविज़न किया गया",
+    "freeze": "केंद्र फ्रीज करें",
+    "unfreeze": "केंद्र अनफ्रीज करें",
+    "close": "केंद्र बंद करें",
+    "tabs": {
+      "profile": "प्रोफ़ाइल",
+      "agreement": "अनुबंध",
+      "package": "पैकेज और क्षेत्र",
+      "kyc": "KYC दस्तावेज़",
+      "provision": "प्रोविज़न"
+    },
+    "status": {
+      "PROSPECT": "संभावित",
+      "ACTIVE": "सक्रिय",
+      "FROZEN": "फ्रोज़न",
+      "CLOSED": "बंद"
+    },
+    "kyc": {
+      "panCard": "PAN कार्ड",
+      "aadhaar": "आधार",
+      "addressProof": "पता प्रमाण",
+      "bankDetails": "बैंक विवरण",
+      "agreementSigned": "अनुबंध हस्ताक्षरित",
+      "centerPhotos": "केंद्र की तस्वीरें",
+      "franchiseFeeReceipt": "फ्रैंचाइज़ी शुल्क रसीद"
+    }
+  },
+  "catalog": {
+    "title": "कैटलॉग प्रशासन",
+    "newCourse": "नया कोर्स",
+    "courseNameEn": "कोर्स का नाम (अंग्रेज़ी)",
+    "courseNameHi": "कोर्स का नाम (हिंदी)",
+    "category": "श्रेणी",
+    "duration": "अवधि (सप्ताह)",
+    "nsqfLevel": "NSQF स्तर",
+    "eligibility": "पात्रता",
+    "syllabusUnits": "पाठ्यक्रम इकाइयाँ",
+    "addUnit": "इकाई जोड़ें",
+    "centerGrants": "प्रति-केंद्र कोर्स अनुमति",
+    "bulkApply": "पैकेज टियर अनुसार बल्क लागू करें",
+    "granted": "अनुमत",
+    "revoked": "रद्द",
+    "feeMin": "न्यूनतम शुल्क",
+    "feeMax": "अधिकतम शुल्क",
+    "admissionCharge": "HO प्रवेश शुल्क",
+    "certCharge": "HO प्रमाणपत्र शुल्क"
+  },
+  "questions": {
+    "title": "प्रश्न बैंक",
+    "newQuestion": "नया प्रश्न",
+    "bulkImport": "बल्क आयात",
+    "type": {
+      "MCQ": "बहुविकल्पीय",
+      "TF": "सत्य/असत्य",
+      "FILL": "रिक्त स्थान भरें",
+      "MATCH": "मिलान",
+      "NUMERIC": "संख्यात्मक",
+      "SUBJECTIVE": "विषयपरक"
+    },
+    "difficulty": {
+      "EASY": "आसान",
+      "MEDIUM": "मध्यम",
+      "HARD": "कठिन"
+    },
+    "status": {
+      "DRAFT": "मसौदा",
+      "REVIEW": "समीक्षाधीन",
+      "LIVE": "लाइव"
+    },
+    "answerKey": "उत्तर कुंजी",
+    "showAnswer": "उत्तर दिखाएं",
+    "hideAnswer": "उत्तर छुपाएं",
+    "usageStats": "उपयोग आँकड़े",
+    "hoLocked": "HO लॉक्ड"
+  },
+  "exams": {
+    "title": "परीक्षा मास्टर",
+    "newExam": "नई परीक्षा",
+    "blueprint": "ब्लूप्रिंट",
+    "topic": "विषय",
+    "duration": "अवधि (मिनट)",
+    "marksPerQ": "प्रति प्रश्न अंक",
+    "negativeMarking": "नकारात्मक अंकन",
+    "antiCheat": "एंटी-चीट स्तर",
+    "resultPolicy": "परिणाम नीति",
+    "lockBank": "प्रश्न बैंक लॉक करें",
+    "type": {
+      "PRACTICE": "अभ्यास",
+      "MOCK": "मॉक",
+      "FINAL": "अंतिम",
+      "SCHOLARSHIP": "छात्रवृत्ति"
+    },
+    "antiCheatLevels": {
+      "NONE": "कोई नहीं",
+      "BASIC": "बेसिक",
+      "STRICT": "कड़ा"
+    },
+    "resultPolicies": {
+      "INSTANT": "तत्काल",
+      "MODERATED": "समीक्षित"
+    }
+  },
+  "certificates": {
+    "title": "प्रमाणपत्र प्राधिकरण",
+    "issuanceQueue": "जारी करने की कतार",
+    "bulkApprove": "बल्क स्वीकृति",
+    "registry": "रजिस्ट्री खोज",
+    "revoke": "रद्द करें",
+    "revokeWarning": "रद्द होने के तुरंत बाद सत्यापन पृष्ठ लाल दिखाई देगा।",
+    "legacyImport": "पुरानी डेटा आयात",
+    "templateDesigner": "टेम्पलेट डिज़ाइनर",
+    "certNo": "प्रमाणपत्र संख्या",
+    "verifyUrl": "सत्यापन URL",
+    "issuing": "प्रमाणपत्र जारी हो रहे हैं...",
+    "issued": "{{count}} प्रमाणपत्र जारी, हस्ताक्षरित PDF कतार में"
+  },
+  "finance": {
+    "title": "नेटवर्क वित्त",
+    "hoCharges": "HO शुल्क कॉन्फ़िग",
+    "centerLedger": "केंद्र खाता बही",
+    "settlements": "निपटान",
+    "generateInvoices": "मासिक चालान बनाएं",
+    "walletLiability": "वॉलेट देनदारी रिपोर्ट",
+    "collections": "संग्रह बनाम देय",
+    "admissionCharge": "प्रवेश शुल्क",
+    "certCharge": "प्रमाणपत्र शुल्क",
+    "royaltyPct": "रॉयल्टी %",
+    "debit": "डेबिट",
+    "credit": "क्रेडिट",
+    "balance": "शेष",
+    "splitStatus": "गेटवे स्प्लिट स्थिति",
+    "payoutSchedule": "भुगतान अनुसूची"
+  },
+  "comms": {
+    "title": "संचार केंद्र",
+    "templates": "WhatsApp टेम्पलेट",
+    "newTemplate": "नया टेम्पलेट",
+    "broadcasts": "प्रसारण निर्माता",
+    "analytics": "डिलीवरी विश्लेषण",
+    "metaStatus": {
+      "PENDING": "प्रतीक्षित",
+      "APPROVED": "स्वीकृत",
+      "REJECTED": "अस्वीकृत"
+    },
+    "channel": {
+      "UTILITY": "उपयोगिता",
+      "MARKETING": "मार्केटिंग"
+    },
+    "scope": {
+      "NETWORK": "पूरा नेटवर्क",
+      "SEGMENT": "पैकेज टियर अनुसार",
+      "CENTER": "व्यक्तिगत केंद्र"
+    },
+    "frequencyWarning": "चेतावनी: प्रति सप्ताह 2 से अधिक प्रसारण जुड़ाव कम कर सकते हैं।",
+    "costPreview": "लागत पूर्वावलोकन",
+    "perMsg": "प्रति संदेश"
+  },
+  "users": {
+    "title": "उपयोगकर्ता और भूमिकाएं",
+    "inviteStaff": "स्टाफ आमंत्रित करें",
+    "permissionPresets": "अनुमति प्रीसेट",
+    "require2Fa": "सभी HO स्टाफ के लिए 2FA अनिवार्य करें",
+    "activeSessions": "सक्रिय सत्र",
+    "revokeSession": "सत्र रद्द करें",
+    "twoFa": "2FA",
+    "lastLogin": "अंतिम लॉगिन",
+    "role": "भूमिका",
+    "device": "डिवाइस",
+    "ip": "IP पता",
+    "lastSeen": "अंतिम बार देखा"
+  },
+  "audit": {
+    "title": "ऑडिट और अनुपालन",
+    "logs": "ऑडिट लॉग",
+    "actor": "अभिनेता",
+    "action": "कार्रवाई",
+    "entityType": "इकाई प्रकार",
+    "consentRegistry": "सहमति रजिस्ट्री",
+    "dataRetention": "डेटा प्रतिधारण मॉनिटर",
+    "breachRunbook": "उल्लंघन रनबुक",
+    "severity": "गंभीरता वर्ग",
+    "dpbNotice": "DPB अधिसूचना — 72 घंटे की विंडो",
+    "retentionYears": "प्रतिधारण (वर्ष)",
+    "lastRun": "अंतिम बार चला",
+    "nextRun": "अगली बार चलेगा"
+  },
+  "settings": {
+    "title": "प्लेटफ़ॉर्म सेटिंग्स",
+    "branding": "ब्रांडिंग",
+    "payment": "भुगतान कॉन्फ़िग",
+    "waba": "WABA कॉन्फ़िग",
+    "sms": "SMS / DLT",
+    "featureFlags": "फीचर फ्लैग",
+    "appVersion": "ऐप संस्करण गेट्स",
+    "accentColor": "एक्सेंट रंग",
+    "pwaName": "PWA नाम",
+    "gateway": "भुगतान गेटवे",
+    "splitPct": "स्प्लिट %",
+    "wabaId": "WABA ID",
+    "phoneNumberId": "फ़ोन नंबर ID",
+    "apiToken": "API टोकन",
+    "senderId": "प्रेषक ID",
+    "dltEntityId": "DLT इकाई ID",
+    "minVersion": "न्यूनतम संस्करण",
+    "forceUpdate": "अनिवार्य अपडेट",
+    "updateMessage": "अपडेट संदेश"
+  }
+}

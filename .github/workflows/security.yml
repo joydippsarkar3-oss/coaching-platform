@@ -1,0 +1,43 @@
+name: Security Scan
+
+on:
+  schedule:
+    - cron: '0 2 * * 1'  # Every Monday 2am UTC
+  workflow_dispatch:
+
+jobs:
+  npm-audit:
+    name: NPM Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit backend
+        working-directory: backend
+        run: npm audit --audit-level=high
+      - name: Audit website
+        working-directory: website
+        run: npm audit --audit-level=high
+      - name: Audit center-admin
+        working-directory: center-admin
+        run: npm audit --audit-level=high
+      - name: Audit super-admin
+        working-directory: super-admin
+        run: npm audit --audit-level=high
+
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    strategy:
+      matrix:
+        language: [javascript, typescript]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+      - uses: github/codeql-action/autobuild@v3
+      - uses: github/codeql-action/analyze@v3

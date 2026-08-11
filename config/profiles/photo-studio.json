@@ -1,0 +1,105 @@
+{
+  "$schema": "../profile.schema.json",
+  "id": "photo-studio",
+  "display_name": "Photo Studio",
+  "version": 1,
+  "modules": ["CUSTOM_ORDER", "CATALOG"],
+  "default_landing": "home",
+  "state_labels": {
+    "CREATED": "Order Received",
+    "IN_PROGRESS": "Editing–Printing",
+    "READY": "Ready",
+    "COMPLETED": "Delivered",
+    "CANCELLED": "Cancelled"
+  },
+  "in_progress_sub_labels": ["Editing", "Printing"],
+  "field_packs": [
+    {
+      "key": "shoot_type",
+      "label": "Shoot Type",
+      "type": "select",
+      "required": true,
+      "options": [
+        "Passport",
+        "Portrait",
+        "Event",
+        "Wedding",
+        "Product",
+        "ID Card",
+        "Other"
+      ],
+      "show_on_customer_copy": true,
+      "show_on_shop_copy": true
+    },
+    {
+      "key": "shoot_date",
+      "label": "Shoot Date",
+      "type": "date",
+      "required": false,
+      "show_on_customer_copy": true,
+      "show_on_shop_copy": true
+    },
+    {
+      "key": "print_sizes",
+      "label": "Print Sizes",
+      "type": "multiselect",
+      "required": false,
+      "options": [
+        "Passport (35x45 mm)",
+        "4x6",
+        "5x7",
+        "6x8",
+        "8x10",
+        "8x12",
+        "A4",
+        "12x18"
+      ],
+      "show_on_customer_copy": true,
+      "show_on_shop_copy": true
+    },
+    {
+      "key": "digital_delivery",
+      "label": "Digital Delivery",
+      "type": "select",
+      "required": false,
+      "options": ["WhatsApp", "Pen Drive", "Link"],
+      "show_on_customer_copy": true,
+      "show_on_shop_copy": true
+    },
+    {
+      "key": "editing_notes",
+      "label": "Editing Notes",
+      "type": "text",
+      "required": false,
+      "show_on_customer_copy": false,
+      "show_on_shop_copy": true
+    }
+  ],
+  "home_quick_actions": [
+    { "id": "new_order", "label": "New Order", "screen": "new_custom_order" },
+    { "id": "scan_qr", "label": "Scan QR", "screen": "scan_qr" },
+    { "id": "orders_board", "label": "Orders Board", "screen": "orders_board" },
+    { "id": "reports", "label": "Reports", "screen": "reports" }
+  ],
+  "receipt_template": "rcpt-custom-order-v1",
+  "catalog_field_hints": {
+    "unit_types": ["piece", "set", "service", "hour"],
+    "allow_decimal_qty": false,
+    "variants_enabled": false,
+    "addons_enabled": false,
+    "batch_tracking": false,
+    "barcode_scan": false,
+    "default_gst_rates": [12, 18],
+    "item_noun": "Service"
+  },
+  "sample_catalog": [
+    { "name": "Passport Photos (8 copies)", "price": 150, "gst_rate": 18, "unit": "set" },
+    { "name": "4x6 Print", "price": 15, "gst_rate": 12, "unit": "piece" },
+    { "name": "8x10 Print", "price": 80, "gst_rate": 12, "unit": "piece" },
+    { "name": "A4 Print", "price": 120, "gst_rate": 12, "unit": "piece" },
+    { "name": "Portrait Session", "price": 500, "gst_rate": 18, "unit": "service" },
+    { "name": "Event Coverage (per hour)", "price": 1500, "gst_rate": 18, "unit": "hour" },
+    { "name": "Photo Frame 8x10", "price": 250, "gst_rate": 18, "unit": "piece" },
+    { "name": "Digital Delivery (Link)", "price": 100, "gst_rate": 18, "unit": "service" }
+  ]
+}

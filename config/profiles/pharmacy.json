@@ -1,0 +1,67 @@
+{
+  "$schema": "../profile.schema.json",
+  "id": "pharmacy",
+  "display_name": "Pharmacy / Medical",
+  "version": 1,
+  "modules": ["QUICK_SALE", "CATALOG", "INVENTORY", "CREDIT_LEDGER", "BATCH_EXPIRY"],
+  "default_landing": "quick_sale",
+  "state_labels": {
+    "CREATED": "Order Received",
+    "IN_PROGRESS": "Preparing",
+    "READY": "Ready for Pickup",
+    "COMPLETED": "Delivered",
+    "CANCELLED": "Cancelled"
+  },
+  "field_packs": [
+    {
+      "key": "doctor_name",
+      "label": "Doctor Name",
+      "type": "text",
+      "required": false,
+      "show_on_customer_copy": true,
+      "show_on_shop_copy": false
+    },
+    {
+      "key": "prescription_photo",
+      "label": "Prescription Photo",
+      "type": "photo",
+      "required": false,
+      "show_on_customer_copy": false,
+      "show_on_shop_copy": false
+    }
+  ],
+  "home_quick_actions": [
+    { "id": "new_bill", "label": "New Bill", "screen": "quick_sale" },
+    { "id": "inventory", "label": "Inventory", "screen": "inventory" },
+    { "id": "expiry_report", "label": "Expiry Report", "screen": "expiry_report" },
+    { "id": "khata", "label": "Khata", "screen": "khata" },
+    { "id": "reports", "label": "Reports", "screen": "reports" }
+  ],
+  "receipt_template": "rcpt-pharmacy-v1",
+  "catalog_field_hints": {
+    "unit_types": ["strip", "piece", "bottle", "pack", "ml"],
+    "allow_decimal_qty": false,
+    "variants_enabled": false,
+    "addons_enabled": false,
+    "batch_tracking": true,
+    "barcode_scan": true,
+    "default_gst_rates": [5, 12, 18],
+    "item_flags": ["SCHEDULE_H", "SCHEDULE_H1"],
+    "item_noun": "Medicine"
+  },
+  "sample_catalog": [
+    { "name": "Paracetamol 500 mg (strip of 15)", "price": 30, "gst_rate": 12, "unit": "strip" },
+    { "name": "Cetirizine 10 mg (strip of 10)", "price": 25, "gst_rate": 12, "unit": "strip" },
+    { "name": "ORS Sachet", "price": 21, "gst_rate": 12, "unit": "piece" },
+    { "name": "Cough Syrup 100 ml", "price": 95, "gst_rate": 12, "unit": "bottle" },
+    { "name": "Antiseptic Liquid 100 ml", "price": 85, "gst_rate": 18, "unit": "bottle" },
+    { "name": "Vitamin D3 Capsules (strip of 4)", "price": 40, "gst_rate": 12, "unit": "strip" },
+    { "name": "Digital Thermometer", "price": 250, "gst_rate": 18, "unit": "piece" },
+    { "name": "Surgical Cotton 100 g", "price": 45, "gst_rate": 5, "unit": "pack" }
+  ],
+  "behavior_flags": {
+    "quick_sale_tracking_qr_default": false,
+    "quick_sale_instant_complete": true,
+    "expiry_alert_days": [90, 30]
+  }
+}

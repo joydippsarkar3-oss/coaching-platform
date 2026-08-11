@@ -1,0 +1,111 @@
+{
+  "$schema": "../profile.schema.json",
+  "id": "mobile-repair",
+  "display_name": "Mobile & Laptop Repair",
+  "version": 1,
+  "modules": ["CUSTOM_ORDER", "CATALOG"],
+  "default_landing": "home",
+  "state_labels": {
+    "CREATED": "Received",
+    "IN_PROGRESS": "Diagnosing–Repairing",
+    "READY": "Ready",
+    "COMPLETED": "Delivered",
+    "CANCELLED": "Cancelled"
+  },
+  "in_progress_sub_labels": ["Diagnosing", "Repairing"],
+  "field_packs": [
+    {
+      "key": "device_brand",
+      "label": "Device Brand",
+      "type": "text",
+      "required": true,
+      "show_on_customer_copy": true,
+      "show_on_shop_copy": true
+    },
+    {
+      "key": "device_model",
+      "label": "Device Model",
+      "type": "text",
+      "required": true,
+      "show_on_customer_copy": true,
+      "show_on_shop_copy": true
+    },
+    {
+      "key": "imei_serial",
+      "label": "IMEI / Serial No",
+      "type": "text",
+      "required": false,
+      "show_on_customer_copy": true,
+      "show_on_shop_copy": true
+    },
+    {
+      "key": "reported_fault",
+      "label": "Reported Fault",
+      "type": "text",
+      "required": true,
+      "show_on_customer_copy": true,
+      "show_on_shop_copy": true
+    },
+    {
+      "key": "physical_condition",
+      "label": "Physical Condition",
+      "type": "multiselect",
+      "required": false,
+      "options": [
+        "No visible damage",
+        "Scratches",
+        "Cracked screen",
+        "Dents",
+        "Back cover damaged",
+        "Water damage marks",
+        "Battery swollen",
+        "Buttons not working"
+      ],
+      "show_on_customer_copy": true,
+      "show_on_shop_copy": true
+    },
+    {
+      "key": "diagnosis_fee",
+      "label": "Diagnosis Fee",
+      "type": "money",
+      "required": false,
+      "show_on_customer_copy": true,
+      "show_on_shop_copy": true
+    },
+    {
+      "key": "estimated_cost",
+      "label": "Estimated Cost",
+      "type": "money",
+      "required": false,
+      "show_on_customer_copy": true,
+      "show_on_shop_copy": true
+    }
+  ],
+  "home_quick_actions": [
+    { "id": "new_repair_order", "label": "New Repair Order", "screen": "new_custom_order" },
+    { "id": "scan_qr", "label": "Scan QR", "screen": "scan_qr" },
+    { "id": "orders_board", "label": "Orders Board", "screen": "orders_board" },
+    { "id": "reports", "label": "Reports", "screen": "reports" }
+  ],
+  "receipt_template": "rcpt-custom-order-v1",
+  "catalog_field_hints": {
+    "unit_types": ["service", "piece"],
+    "allow_decimal_qty": false,
+    "variants_enabled": false,
+    "addons_enabled": false,
+    "batch_tracking": false,
+    "barcode_scan": false,
+    "default_gst_rates": [18],
+    "item_noun": "Service"
+  },
+  "sample_catalog": [
+    { "name": "Mobile Screen Replacement", "price": 1200, "gst_rate": 18, "unit": "service" },
+    { "name": "Battery Replacement", "price": 800, "gst_rate": 18, "unit": "service" },
+    { "name": "Charging Port Repair", "price": 450, "gst_rate": 18, "unit": "service" },
+    { "name": "Speaker / Mic Repair", "price": 400, "gst_rate": 18, "unit": "service" },
+    { "name": "Software Reinstall & Backup", "price": 300, "gst_rate": 18, "unit": "service" },
+    { "name": "Laptop Keyboard Replacement", "price": 1500, "gst_rate": 18, "unit": "service" },
+    { "name": "Laptop SSD Upgrade (240 GB)", "price": 2200, "gst_rate": 18, "unit": "service" },
+    { "name": "Tempered Glass", "price": 150, "gst_rate": 18, "unit": "piece" }
+  ]
+}

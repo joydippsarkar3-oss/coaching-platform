@@ -1,0 +1,298 @@
+{
+  "nav": {
+    "dashboard": "Network Dashboard",
+    "centers": "Center Lifecycle",
+    "catalog": "Catalog Governance",
+    "questionBanks": "Question Banks",
+    "examMasters": "Exam Masters",
+    "certificates": "Certificate Authority",
+    "finance": "Network Finance",
+    "comms": "Comms Center",
+    "users": "Users & Roles",
+    "audit": "Audit & Compliance",
+    "settings": "Platform Settings",
+    "logout": "Logout"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "search": "Search",
+    "filter": "Filter",
+    "export": "Export CSV",
+    "import": "Import",
+    "approve": "Approve",
+    "reject": "Reject",
+    "confirm": "Confirm",
+    "loading": "Loading...",
+    "noData": "No data",
+    "actions": "Actions",
+    "status": "Status",
+    "name": "Name",
+    "email": "Email",
+    "phone": "Phone",
+    "date": "Date",
+    "amount": "Amount",
+    "reason": "Reason",
+    "required": "This field is required",
+    "submit": "Submit",
+    "back": "Back",
+    "next": "Next",
+    "close": "Close",
+    "view": "View",
+    "upload": "Upload",
+    "download": "Download",
+    "preview": "Preview",
+    "refresh": "Refresh",
+    "active": "Active",
+    "inactive": "Inactive",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "yes": "Yes",
+    "no": "No",
+    "all": "All"
+  },
+  "dashboard": {
+    "title": "Network Dashboard",
+    "kpi": {
+      "activeCenters": "Active Centers",
+      "studentsEnrolled": "Students Enrolled MTD",
+      "networkRevenue": "Network Revenue MTD",
+      "certificatesIssued": "Certificates Issued MTD"
+    },
+    "charts": {
+      "monthlyAdmissions": "Monthly Admissions (Last 6 months)",
+      "revenueByCenter": "Revenue by Center (Top 10)"
+    },
+    "leaderboard": {
+      "title": "Center Leaderboard",
+      "rank": "Rank",
+      "center": "Center",
+      "city": "City",
+      "admissions": "Admissions",
+      "revenue": "Revenue",
+      "collection": "Collection %"
+    },
+    "alerts": {
+      "title": "Network Alerts",
+      "lowCollection": "Low collection rate",
+      "agreementExpiry": "Agreement expiring soon",
+      "pendingCerts": "Pending certificate requests",
+      "kycIncomplete": "KYC incomplete"
+    },
+    "mapPlaceholder": "Map view — configure VITE_MAPS_API_KEY"
+  },
+  "centers": {
+    "title": "Center Lifecycle",
+    "newApplication": "New Franchise Application",
+    "provision": "One-click Provision",
+    "provisionSuccess": "Center provisioned successfully",
+    "freeze": "Freeze Center",
+    "unfreeze": "Unfreeze Center",
+    "close": "Close Center",
+    "tabs": {
+      "profile": "Profile",
+      "agreement": "Agreement",
+      "package": "Package & Territory",
+      "kyc": "KYC Docs",
+      "provision": "Provision"
+    },
+    "status": {
+      "PROSPECT": "Prospect",
+      "ACTIVE": "Active",
+      "FROZEN": "Frozen",
+      "CLOSED": "Closed"
+    },
+    "kyc": {
+      "panCard": "PAN Card",
+      "aadhaar": "Aadhaar",
+      "addressProof": "Address Proof",
+      "bankDetails": "Bank Details",
+      "agreementSigned": "Agreement Signed",
+      "centerPhotos": "Center Photos",
+      "franchiseFeeReceipt": "Franchise Fee Receipt"
+    }
+  },
+  "catalog": {
+    "title": "Catalog Governance",
+    "newCourse": "New Course",
+    "courseNameEn": "Course Name (English)",
+    "courseNameHi": "Course Name (Hindi)",
+    "category": "Category",
+    "duration": "Duration (weeks)",
+    "nsqfLevel": "NSQF Level",
+    "eligibility": "Eligibility",
+    "syllabusUnits": "Syllabus Units",
+    "addUnit": "Add Unit",
+    "centerGrants": "Per-Center Course Grants",
+    "bulkApply": "Bulk Apply by Package Tier",
+    "granted": "Granted",
+    "revoked": "Revoked",
+    "feeMin": "Min Fee",
+    "feeMax": "Max Fee",
+    "admissionCharge": "HO Admission Charge",
+    "certCharge": "HO Certificate Charge"
+  },
+  "questions": {
+    "title": "Question Banks",
+    "newQuestion": "New Question",
+    "bulkImport": "Bulk Import",
+    "type": {
+      "MCQ": "MCQ",
+      "TF": "True/False",
+      "FILL": "Fill in Blank",
+      "MATCH": "Match",
+      "NUMERIC": "Numeric",
+      "SUBJECTIVE": "Subjective"
+    },
+    "difficulty": {
+      "EASY": "Easy",
+      "MEDIUM": "Medium",
+      "HARD": "Hard"
+    },
+    "status": {
+      "DRAFT": "Draft",
+      "REVIEW": "Under Review",
+      "LIVE": "Live"
+    },
+    "answerKey": "Answer Key",
+    "showAnswer": "Show Answer",
+    "hideAnswer": "Hide Answer",
+    "usageStats": "Usage Stats",
+    "hoLocked": "HO Locked"
+  },
+  "exams": {
+    "title": "Exam Masters",
+    "newExam": "New Exam",
+    "blueprint": "Blueprint",
+    "topic": "Topic",
+    "duration": "Duration (minutes)",
+    "marksPerQ": "Marks per Question",
+    "negativeMarking": "Negative Marking",
+    "antiCheat": "Anti-Cheat Level",
+    "resultPolicy": "Result Policy",
+    "lockBank": "Lock Question Bank",
+    "type": {
+      "PRACTICE": "Practice",
+      "MOCK": "Mock",
+      "FINAL": "Final",
+      "SCHOLARSHIP": "Scholarship"
+    },
+    "antiCheatLevels": {
+      "NONE": "None",
+      "BASIC": "Basic",
+      "STRICT": "Strict"
+    },
+    "resultPolicies": {
+      "INSTANT": "Instant",
+      "MODERATED": "Moderated"
+    }
+  },
+  "certificates": {
+    "title": "Certificate Authority",
+    "issuanceQueue": "Issuance Queue",
+    "bulkApprove": "Bulk Approve",
+    "registry": "Registry Search",
+    "revoke": "Revoke",
+    "revokeWarning": "The verify page will show red immediately after revocation.",
+    "legacyImport": "Legacy Import",
+    "templateDesigner": "Template Designer",
+    "certNo": "Certificate No.",
+    "verifyUrl": "Verify URL",
+    "issuing": "Issuing certificates...",
+    "issued": "{{count}} certificates issued, signed PDFs queued"
+  },
+  "finance": {
+    "title": "Network Finance",
+    "hoCharges": "HO Charge Config",
+    "centerLedger": "Center Ledger",
+    "settlements": "Settlements",
+    "generateInvoices": "Generate Monthly Invoices",
+    "walletLiability": "Wallet Liability Report",
+    "collections": "Collections vs Dues",
+    "admissionCharge": "Admission Charge",
+    "certCharge": "Certificate Charge",
+    "royaltyPct": "Royalty %",
+    "debit": "Debit",
+    "credit": "Credit",
+    "balance": "Balance",
+    "splitStatus": "Gateway Split Status",
+    "payoutSchedule": "Payout Schedule"
+  },
+  "comms": {
+    "title": "Comms Center",
+    "templates": "WhatsApp Templates",
+    "newTemplate": "New Template",
+    "broadcasts": "Broadcast Composer",
+    "analytics": "Delivery Analytics",
+    "metaStatus": {
+      "PENDING": "Pending",
+      "APPROVED": "Approved",
+      "REJECTED": "Rejected"
+    },
+    "channel": {
+      "UTILITY": "Utility",
+      "MARKETING": "Marketing"
+    },
+    "scope": {
+      "NETWORK": "Entire Network",
+      "SEGMENT": "By Package Tier",
+      "CENTER": "Individual Centers"
+    },
+    "frequencyWarning": "Warning: More than 2 broadcasts/week may reduce engagement.",
+    "costPreview": "Cost preview",
+    "perMsg": "per message"
+  },
+  "users": {
+    "title": "Users & Roles",
+    "inviteStaff": "Invite Staff",
+    "permissionPresets": "Permission Presets",
+    "require2Fa": "Require 2FA for all HO staff",
+    "activeSessions": "Active Sessions",
+    "revokeSession": "Revoke Session",
+    "twoFa": "2FA",
+    "lastLogin": "Last Login",
+    "role": "Role",
+    "device": "Device",
+    "ip": "IP Address",
+    "lastSeen": "Last Seen"
+  },
+  "audit": {
+    "title": "Audit & Compliance",
+    "logs": "Audit Log",
+    "actor": "Actor",
+    "action": "Action",
+    "entityType": "Entity Type",
+    "consentRegistry": "Consent Registry",
+    "dataRetention": "Data Retention Monitor",
+    "breachRunbook": "Breach Runbook",
+    "severity": "Severity Class",
+    "dpbNotice": "DPB Notification — 72-hour window",
+    "retentionYears": "Retention (years)",
+    "lastRun": "Last Run",
+    "nextRun": "Next Run"
+  },
+  "settings": {
+    "title": "Platform Settings",
+    "branding": "Branding",
+    "payment": "Payment Config",
+    "waba": "WABA Config",
+    "sms": "SMS / DLT",
+    "featureFlags": "Feature Flags",
+    "appVersion": "App Version Gates",
+    "accentColor": "Accent Color",
+    "pwaName": "PWA Name",
+    "gateway": "Payment Gateway",
+    "splitPct": "Split %",
+    "wabaId": "WABA ID",
+    "phoneNumberId": "Phone Number ID",
+    "apiToken": "API Token",
+    "senderId": "Sender ID",
+    "dltEntityId": "DLT Entity ID",
+    "minVersion": "Minimum Version",
+    "forceUpdate": "Force Update",
+    "updateMessage": "Update Message"
+  }
+}

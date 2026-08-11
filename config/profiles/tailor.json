@@ -1,0 +1,105 @@
+{
+  "$schema": "../profile.schema.json",
+  "id": "tailor",
+  "display_name": "Tailor / Boutique",
+  "version": 1,
+  "modules": ["CUSTOM_ORDER", "CATALOG"],
+  "default_landing": "home",
+  "state_labels": {
+    "CREATED": "Order Received",
+    "IN_PROGRESS": "Cutting–Stitching",
+    "READY": "Ready for Trial–Pickup",
+    "COMPLETED": "Delivered",
+    "CANCELLED": "Cancelled"
+  },
+  "in_progress_sub_labels": ["Cutting", "Stitching"],
+  "field_packs": [
+    {
+      "key": "measurement_profile",
+      "label": "Measurement Profile",
+      "type": "text",
+      "required": false,
+      "show_on_customer_copy": false,
+      "show_on_shop_copy": true
+    },
+    {
+      "key": "garment_type",
+      "label": "Garment Type",
+      "type": "select",
+      "required": true,
+      "options": [
+        "Shirt",
+        "Trousers",
+        "Kurta",
+        "Kurti",
+        "Blouse",
+        "Salwar Suit",
+        "Lehenga",
+        "Sherwani",
+        "Dress",
+        "Other"
+      ],
+      "show_on_customer_copy": true,
+      "show_on_shop_copy": true
+    },
+    {
+      "key": "fabric_provided_by",
+      "label": "Fabric Provided By",
+      "type": "select",
+      "required": true,
+      "options": ["Customer", "Shop"],
+      "show_on_customer_copy": false,
+      "show_on_shop_copy": true
+    },
+    {
+      "key": "trial_date",
+      "label": "Trial Date",
+      "type": "date",
+      "required": false,
+      "show_on_customer_copy": true,
+      "show_on_shop_copy": true
+    },
+    {
+      "key": "style_notes",
+      "label": "Style Notes",
+      "type": "text",
+      "required": false,
+      "show_on_customer_copy": false,
+      "show_on_shop_copy": true
+    },
+    {
+      "key": "reference_photo",
+      "label": "Reference Photo",
+      "type": "photo",
+      "required": false,
+      "show_on_customer_copy": false,
+      "show_on_shop_copy": false
+    }
+  ],
+  "home_quick_actions": [
+    { "id": "new_order", "label": "New Order", "screen": "new_custom_order" },
+    { "id": "scan_qr", "label": "Scan QR", "screen": "scan_qr" },
+    { "id": "orders_board", "label": "Orders Board", "screen": "orders_board" },
+    { "id": "reports", "label": "Reports", "screen": "reports" }
+  ],
+  "receipt_template": "rcpt-custom-order-v1",
+  "catalog_field_hints": {
+    "unit_types": ["service", "piece"],
+    "allow_decimal_qty": false,
+    "variants_enabled": false,
+    "addons_enabled": false,
+    "batch_tracking": false,
+    "barcode_scan": false,
+    "default_gst_rates": [5, 18],
+    "item_noun": "Service"
+  },
+  "sample_catalog": [
+    { "name": "Shirt Stitching", "price": 450, "gst_rate": 5, "unit": "service" },
+    { "name": "Trouser Stitching", "price": 550, "gst_rate": 5, "unit": "service" },
+    { "name": "Kurta Stitching", "price": 500, "gst_rate": 5, "unit": "service" },
+    { "name": "Blouse Stitching", "price": 400, "gst_rate": 5, "unit": "service" },
+    { "name": "Salwar Suit Stitching", "price": 700, "gst_rate": 5, "unit": "service" },
+    { "name": "Alteration", "price": 100, "gst_rate": 5, "unit": "service" },
+    { "name": "Fall & Pico", "price": 60, "gst_rate": 5, "unit": "service" }
+  ]
+}

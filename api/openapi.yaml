@@ -1,0 +1,3934 @@
+openapi: 3.1.0
+info:
+  title: BizBill API
+  version: 1.0.0
+  summary: Billing + QR order-tracking platform for Indian small shops.
+  description: |
+    The BizBill `/v1` REST API consumed by the Android merchant app (via `/v1/sync` only),
+    the Merchant Web Panel, the Super Admin Panel, and the public customer tracking page.
+
+    ## Conventions (normative — see docs/api/README.md for the full text)
+    - **JSON over HTTPS**, camelCase property names. SQL snake_case never leaks into payloads.
+    - **Money is integer paise** (`totalAmount: 133400` = Rs 1,334.00). Never floats, never strings.
+    - **Timestamps** are RFC 3339 / ISO 8601 UTC (`2026-07-31T13:12:42Z`). Client-observed times
+      (e.g. `clientUpdatedAt`, `paidAt`) carry the device clock; the server tolerates ±5 min skew.
+    - **IDs**: client-creatable entities (orders, orderItems, payments, customers,
+      creditLedgerEntries) use client-generated UUIDv7. Server-only entities use server UUIDs.
+    - **Order states**: `CREATED, IN_PROGRESS, READY, COMPLETED, CANCELLED` (monotonic forward;
+      CANCELLED branches from any non-terminal state). **Payment status**: `UNPAID, PARTIAL, PAID`.
+      **Payment methods**: `CASH, UPI, CARD, OTHER`.
+    - **Pagination** is opaque-cursor based: pass `cursor` from the previous response's
+      `nextCursor`; `nextCursor: null` means end of results.
+    - **Errors** always use the shared `ErrorEnvelope` shape with a machine-readable `code`.
+    - **Idempotency**: `POST /v1/sync` requires an `Idempotency-Key` header; replays return the
+      stored per-op results without re-applying.
+    - **Rate limits** are enforced per endpoint class (per JWT, or per IP where unauthenticated).
+      Every response carries `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`;
+      429 responses add `Retry-After`.
+    - **Auth**: Firebase ID tokens are exchanged once at `POST /v1/auth/exchange` for a backend
+      JWT pair (15-min access, 30-day rotating refresh). All non-public endpoints require
+      `Authorization: Bearer {accessToken}`. Admin endpoints require an admin-issued JWT
+      (`admin_role` claim, TOTP-verified session) and are IP-allowlisted.
+    - **Versioning**: breaking changes require `/v2`; additive changes (new optional fields,
+      new endpoints, new enum values on *output-only* fields) do not.
+  contact:
+    name: BizBill Engineering
+    url: https://bizbill.app
+  license:
+    name: Proprietary
+    identifier: LicenseRef-BizBill-Proprietary
+
+servers:
+  - url: https://api.bizbill.app
+    description: Production
+  - url: https://api.staging.bizbill.app
+    description: Staging (1/10-scale mirror)
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Auth
+    description: Firebase ID token exchange and JWT refresh.
+  - name: Tenant
+    description: Tenant (shop) profile and business-profile configuration.
+  - name: Catalog
+    description: Products and pharmacy stock batches (CATALOG / INVENTORY / BATCH_EXPIRY modules).
+  - name: Orders
+    description: Orders, state transitions and cancellation. Web-panel write surface; the Android app writes exclusively through /v1/sync.
+  - name: Payments
+    description: Append-only payment records against orders.
+  - name: Customers
+    description: Per-tenant customers and the CREDIT_LEDGER (khata).
+  - name: Sync
+    description: Offline-first batched op push and cursor-based delta pull.
+  - name: Public
+    description: Unauthenticated customer tracking endpoint (CDN-cached).
+  - name: Reports
+    description: Sales, GST and outstanding-balance reports (served from read replicas).
+  - name: Subscription
+    description: Plan, checkout, and signed entitlement blob.
+  - name: Admin
+    description: Super Admin Panel endpoints. Admin JWT + TOTP; IP allowlist; every access audit-logged.
+
+paths:
+  # ───────────────────────────── Auth ─────────────────────────────
+  /v1/auth/exchange:
+    post:
+      operationId: authExchange
+      tags: [Auth]
+      summary: Exchange a Firebase ID token for a backend JWT pair
+      description: |
+        Verifies the Firebase ID token (Phone OTP or Google Sign-In), resolves or creates the
+        phone-keyed User, registers the calling device, and issues a backend JWT pair:
+        a 15-minute access token and a 30-day rotating refresh token.
+
+        Rate limit: **10/min per IP**. This is the only endpoint that accepts a Firebase token;
+        every other authenticated call uses the backend access token.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthExchangeRequest'
+            example:
+              firebaseIdToken: eyJhbGciOiJSUzI1NiIsImtpZCI6IjFlOWdkazcifQ.eyJpc3MiOiJo...
+              device:
+                deviceId: 8f14e45f-ceea-467f-a7e2-8b6f1a2c9d01
+                platform: ANDROID
+                model: Redmi Note 12
+                osVersion: "14"
+                appVersion: 1.4.2
+                fcmToken: fXk3...:APA91bH...
+      responses:
+        '200':
+          description: Token pair issued. `tenants` lists every tenant the user belongs to; the client selects one and scopes subsequent calls via the access token minted for it.
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthExchangeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Firebase token invalid, expired, or revoked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  code: FIREBASE_TOKEN_INVALID
+                  message: Firebase ID token could not be verified.
+                  traceId: 7f2c1b7e9d3a4f01
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /v1/auth/refresh:
+    post:
+      operationId: authRefresh
+      tags: [Auth]
+      summary: Rotate the refresh token and mint a new access token
+      description: |
+        Accepts a valid refresh token and returns a **new** pair (refresh rotation: the presented
+        refresh token is invalidated on use). Reuse of a rotated-out token revokes the whole
+        device session (theft detection) and returns 401 `REFRESH_REUSED`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRefreshRequest'
+            example:
+              refreshToken: rt_v1.5b3fc4a9.eyJzdWIiOiJ1c3JfMDFKMk...
+      responses:
+        '200':
+          description: New token pair.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        '401':
+          description: Refresh token expired, revoked, or reused after rotation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  code: REFRESH_REUSED
+                  message: Refresh token was already rotated; device session revoked. Re-authenticate.
+                  traceId: 3a9d0c11b2e84f77
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  # ───────────────────────────── Tenant ─────────────────────────────
+  /v1/tenant:
+    get:
+      operationId: getTenant
+      tags: [Tenant]
+      summary: Get the current tenant (shop) profile
+      description: Returns the tenant identified by the JWT `tenant_id` claim. Rate limit 60/min.
+      responses:
+        '200':
+          description: Tenant profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tenant'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    patch:
+      operationId: updateTenant
+      tags: [Tenant]
+      summary: Update editable tenant fields
+      description: |
+        Editable from the panel: shop profile fields (name, address, bill phone, logo),
+        `gstin`, `upiVpa`. `shopcode` is immutable after onboarding. GSTIN must match
+        `^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$`; an invalid value is rejected with
+        `VALIDATION_FAILED` and GST-labelled invoices remain blocked until a valid one is stored.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantUpdate'
+            example:
+              shopName: Sharma Printers
+              gstin: 27ABCDE1234F1Z5
+              upiVpa: sharmaprint@okhdfcbank
+              billPhone: "+919822012345"
+              address:
+                lines: ["12 MG Road"]
+                city: Pune
+                pinCode: "411001"
+                state: MH
+      responses:
+        '200':
+          description: Updated tenant profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tenant'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /v1/tenant/business-profile:
+    get:
+      operationId: getBusinessProfile
+      tags: [Tenant]
+      summary: Get the tenant's business profile (type, modules, niche config, state labels)
+      responses:
+        '200':
+          description: Business profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessProfile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    patch:
+      operationId: updateBusinessProfile
+      tags: [Tenant]
+      summary: Update business type, module toggles, or display state labels
+      description: |
+        Switching business type applies the new module preset non-destructively (no data is
+        deleted). Individual modules may be toggled subject to plan entitlements — enabling a
+        plan-gated module without entitlement returns 403 `PLAN_FEATURE_LOCKED`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BusinessProfileUpdate'
+            example:
+              modules:
+                CREDIT_LEDGER: true
+                KOT_TOKEN: false
+              displayStateLabels:
+                IN_PROGRESS: Stitching
+      responses:
+        '200':
+          description: Updated business profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessProfile'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /v1/tenant/shopcode-check:
+    post:
+      operationId: checkShopcode
+      tags: [Tenant]
+      summary: Check SHOPCODE availability (onboarding step 1)
+      description: |
+        Real-time uniqueness check during onboarding. Returns availability plus up to 3
+        alternative suggestions on collision. Offline-reserved shopcodes are validated at first
+        sync via the same rule set.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShopcodeCheckRequest'
+            example:
+              shopcode: PRNT
+      responses:
+        '200':
+          description: Availability result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShopcodeCheckResponse'
+              examples:
+                available:
+                  value:
+                    shopcode: PRNT
+                    available: true
+                    suggestions: []
+                taken:
+                  value:
+                    shopcode: PRNT
+                    available: false
+                    suggestions: [PRNT1, PRNTS, PPRNT]
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  # ───────────────────────────── Catalog ─────────────────────────────
+  /v1/products:
+    get:
+      operationId: listProducts
+      tags: [Catalog]
+      summary: List products (cursor-paginated)
+      description: Rate limit 120/min. Soft-deleted products are excluded unless `includeDeleted=true` (sync/debug use).
+      parameters:
+        - $ref: '#/components/parameters/cursor'
+        - $ref: '#/components/parameters/limit'
+        - name: q
+          in: query
+          description: Free-text search on name and SKU.
+          schema:
+            type: string
+            maxLength: 120
+        - name: trackInventory
+          in: query
+          description: Filter to inventory-tracked products only.
+          schema:
+            type: boolean
+        - name: includeDeleted
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Page of products.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, nextCursor]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Product'
+                  nextCursor:
+                    type: [string, 'null']
+                    description: Opaque cursor for the next page; null when exhausted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      operationId: createProduct
+      tags: [Catalog]
+      summary: Create a product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductCreate'
+            example:
+              name: Visiting Cards (500)
+              sku: VC-500
+              price: 45000
+              unit: pack
+              hsnSac: "4911"
+              gstRate: 18
+              trackInventory: false
+      responses:
+        '201':
+          description: Product created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Duplicate SKU within the tenant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  code: DUPLICATE_SKU
+                  message: A product with SKU "VC-500" already exists.
+                  traceId: 91be44c02a17d3e8
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /v1/products/{productId}:
+    parameters:
+      - $ref: '#/components/parameters/productId'
+    get:
+      operationId: getProduct
+      tags: [Catalog]
+      summary: Get a product
+      responses:
+        '200':
+          description: The product.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    patch:
+      operationId: updateProduct
+      tags: [Catalog]
+      summary: Update a product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductUpdate'
+            example:
+              price: 47500
+              gstRate: 18
+      responses:
+        '200':
+          description: Updated product.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      operationId: deleteProduct
+      tags: [Catalog]
+      summary: Soft-delete a product (tombstone)
+      description: Sets `deletedAt`; the row is retained and syncs as a tombstone. Existing order lines keep their frozen snapshot fields.
+      responses:
+        '204':
+          description: Product tombstoned.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /v1/products/{productId}/batches:
+    parameters:
+      - $ref: '#/components/parameters/productId'
+    get:
+      operationId: listStockBatches
+      tags: [Catalog]
+      summary: List stock batches for a product (BATCH_EXPIRY module)
+      parameters:
+        - $ref: '#/components/parameters/cursor'
+        - $ref: '#/components/parameters/limit'
+        - name: expiringBefore
+          in: query
+          description: Only batches expiring on/before this date (near-expiry report feed).
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Page of batches.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, nextCursor]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StockBatch'
+                  nextCursor:
+                    type: [string, 'null']
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      operationId: createStockBatch
+      tags: [Catalog]
+      summary: Add a stock batch (BATCH_EXPIRY module)
+      description: Requires the BATCH_EXPIRY module to be enabled; otherwise 403 `MODULE_DISABLED`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockBatchCreate'
+            example:
+              batchNo: PCM500-B2407
+              expiryDate: "2027-06-30"
+              qty: 200
+              mrp: 3050
+      responses:
+        '201':
+          description: Batch created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockBatch'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  # ───────────────────────────── Orders ─────────────────────────────
+  /v1/orders:
+    get:
+      operationId: listOrders
+      tags: [Orders]
+      summary: List orders with filters (cursor-paginated)
+      description: |
+        Backs the panel "Orders & Invoices" screen. Default sort: `createdAt` descending.
+        Rate limit 300/min.
+      parameters:
+        - $ref: '#/components/parameters/cursor'
+        - $ref: '#/components/parameters/limit'
+        - name: state
+          in: query
+          description: Filter by canonical order state (repeatable).
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/OrderState'
+          explode: true
+        - name: paymentStatus
+          in: query
+          description: Filter by payment status (repeatable).
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/PaymentStatus'
+          explode: true
+        - name: module
+          in: query
+          description: Order origin module.
+          schema:
+            type: string
+            enum: [CUSTOM_ORDER, QUICK_SALE]
+        - name: customerId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          description: Created-at lower bound (inclusive).
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: Created-at upper bound (exclusive).
+          schema:
+            type: string
+            format: date-time
+        - name: q
+          in: query
+          description: Search Order No, customer name, or customer phone.
+          schema:
+            type: string
+            maxLength: 60
+      responses:
+        '200':
+          description: Page of orders (summary projection).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, nextCursor]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OrderSummary'
+                  nextCursor:
+                    type: [string, 'null']
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      operationId: createOrder
+      tags: [Orders]
+      summary: Create an order (web-panel write path)
+      description: |
+        Phase-2 web write path; the Android app creates orders exclusively through `/v1/sync`
+        (FR-7.15). The client supplies the UUIDv7 `id`, the device-allocated `orderNo`, and the
+        22-char `trackingToken`; the server validates uniqueness and never rewrites them
+        (FR-3.14). Amount fields are verified server-side against the deterministic FR-3.6
+        calculation order; a mismatch returns 422 `AMOUNT_MISMATCH`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderCreate'
+            example:
+              id: 018f3b6e-7c2a-7d90-b1f4-9a2e0c5d8811
+              orderNo: PRNT-0231
+              trackingToken: 7Kj2mQ9xLp4Wn8Rt3Vb6Yc
+              module: CUSTOM_ORDER
+              customerId: 018f3b6e-1111-7aaa-9c21-4d5e6f708192
+              items:
+                - id: 018f3b6e-7c2a-7d90-b1f4-9a2e0c5d8812
+                  description: Visiting Cards
+                  qty: "500"
+                  unitPrice: 90
+                  gstRate: 18
+                  hsnSac: "4911"
+                  lineTotal: 45000
+                - id: 018f3b6e-7c2a-7d90-b1f4-9a2e0c5d8813
+                  description: Flex Banner 3x6
+                  qty: "1"
+                  unitPrice: 54000
+                  gstRate: 18
+                  hsnSac: "4911"
+                  lineTotal: 54000
+                - id: 018f3b6e-7c2a-7d90-b1f4-9a2e0c5d8814
+                  description: Design Charges
+                  qty: "1"
+                  unitPrice: 20000
+                  gstRate: 18
+                  hsnSac: "9989"
+                  lineTotal: 20000
+              billDiscount:
+                kind: PERCENT
+                value: 500
+              subtotal: 119000
+              discountTotal: 5950
+              taxableValue: 113050
+              cgst: 10174
+              sgst: 10174
+              roundOff: 2
+              totalAmount: 133400
+              advancePaid: 50000
+              advanceMethod: UPI
+              promisedReadyAt: "2026-08-02T11:30:00Z"
+              customFields:
+                paper: Matte 300gsm
+                sides: double
+              notes: Logo in dark blue; file received on WhatsApp.
+              deviceId: 8f14e45f-ceea-467f-a7e2-8b6f1a2c9d01
+              clientUpdatedAt: "2026-07-31T13:12:42Z"
+      responses:
+        '201':
+          description: Order created with derived `balanceDue` and `paymentStatus`, plus the advance recorded as the first payment row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+              example:
+                id: 018f3b6e-7c2a-7d90-b1f4-9a2e0c5d8811
+                orderNo: PRNT-0231
+                trackingToken: 7Kj2mQ9xLp4Wn8Rt3Vb6Yc
+                trackingUrl: https://track.bizbill.app/t/7Kj2mQ9xLp4Wn8Rt3Vb6Yc
+                module: CUSTOM_ORDER
+                state: CREATED
+                displayStateLabel: Order Placed
+                paymentStatus: PARTIAL
+                customerId: 018f3b6e-1111-7aaa-9c21-4d5e6f708192
+                items:
+                  - id: 018f3b6e-7c2a-7d90-b1f4-9a2e0c5d8812
+                    productId: null
+                    description: Visiting Cards
+                    qty: "500"
+                    unitPrice: 90
+                    gstRate: 18
+                    hsnSac: "4911"
+                    lineDiscount: null
+                    lineTotal: 45000
+                    itemCustomFields: {}
+                  - id: 018f3b6e-7c2a-7d90-b1f4-9a2e0c5d8813
+                    productId: null
+                    description: Flex Banner 3x6
+                    qty: "1"
+                    unitPrice: 54000
+                    gstRate: 18
+                    hsnSac: "4911"
+                    lineDiscount: null
+                    lineTotal: 54000
+                    itemCustomFields: {}
+                  - id: 018f3b6e-7c2a-7d90-b1f4-9a2e0c5d8814
+                    productId: null
+                    description: Design Charges
+                    qty: "1"
+                    unitPrice: 20000
+                    gstRate: 18
+                    hsnSac: "9989"
+                    lineDiscount: null
+                    lineTotal: 20000
+                    itemCustomFields: {}
+                billDiscount:
+                  kind: PERCENT
+                  value: 500
+                subtotal: 119000
+                discountTotal: 5950
+                taxableValue: 113050
+                cgst: 10174
+                sgst: 10174
+                roundOff: 2
+                totalAmount: 133400
+                advancePaid: 50000
+                balanceDue: 83400
+                payments:
+                  - id: 018f3b6e-7c2a-7d90-b1f4-9a2e0c5d8815
+                    orderId: 018f3b6e-7c2a-7d90-b1f4-9a2e0c5d8811
+                    amount: 50000
+                    method: UPI
+                    paidAt: "2026-07-31T13:12:42Z"
+                    note: Advance at booking
+                    createdAt: "2026-07-31T13:12:44Z"
+                stateHistory:
+                  - fromState: null
+                    toState: CREATED
+                    actor: MERCHANT
+                    trigger: APP_BUTTON
+                    occurredAt: "2026-07-31T13:12:42Z"
+                customFields:
+                  paper: Matte 300gsm
+                  sides: double
+                notes: Logo in dark blue; file received on WhatsApp.
+                promisedReadyAt: "2026-08-02T11:30:00Z"
+                cancelReason: null
+                deviceId: 8f14e45f-ceea-467f-a7e2-8b6f1a2c9d01
+                clientUpdatedAt: "2026-07-31T13:12:42Z"
+                createdAt: "2026-07-31T13:12:44Z"
+                updatedAt: "2026-07-31T13:12:44Z"
+                deletedAt: null
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Duplicate order id / orderNo / trackingToken within scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  code: DUPLICATE_ORDER_NO
+                  message: Order number PRNT-0231 already exists for this tenant.
+                  traceId: c4d2210a9be371f5
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /v1/orders/{orderId}:
+    parameters:
+      - $ref: '#/components/parameters/orderId'
+    get:
+      operationId: getOrder
+      tags: [Orders]
+      summary: Get an order with items, payments and state history
+      responses:
+        '200':
+          description: Full order detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    patch:
+      operationId: updateOrder
+      tags: [Orders]
+      summary: Update order content (items, customer link, custom fields, notes)
+      description: |
+        Last-write-wins by `clientUpdatedAt` (FR-7.11). Does **not** change `state` — use the
+        state endpoint. Amount fields are re-verified against FR-3.6. Terminal orders
+        (COMPLETED/CANCELLED) reject content edits with 409 `ORDER_TERMINAL`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderUpdate'
+      responses:
+        '200':
+          description: Updated order.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Order is terminal, or a stale `clientUpdatedAt` lost last-write-wins.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  code: STALE_WRITE
+                  message: A newer version of this order exists; refetch and reapply.
+                  traceId: e00c7d5b12a94f36
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /v1/orders/{orderId}/state:
+    parameters:
+      - $ref: '#/components/parameters/orderId'
+    post:
+      operationId: transitionOrderState
+      tags: [Orders]
+      summary: Advance the order state (monotonic forward)
+      description: |
+        Server-enforced monotonic forward transitions along
+        CREATED → IN_PROGRESS → READY → COMPLETED; forward skips allowed with
+        `confirmSkip: true`. CANCELLED is **not** accepted here — use the cancel endpoint.
+        A backward move returns 409 `STATE_REGRESSION` with the authoritative current state.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderStateTransitionRequest'
+            example:
+              toState: READY
+              trigger: SHOP_COPY_SCAN
+              occurredAt: "2026-08-01T10:05:00Z"
+      responses:
+        '200':
+          description: Transition applied; returns the updated order.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Backward/invalid transition; body carries the winning server state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  code: STATE_REGRESSION
+                  message: Order is already COMPLETED; backward transitions are not permitted.
+                  traceId: 1b6f0a83c92d47e0
+                  details:
+                    currentState: COMPLETED
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /v1/orders/{orderId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/orderId'
+    post:
+      operationId: cancelOrder
+      tags: [Orders]
+      summary: Cancel an order (any non-terminal state)
+      description: |
+        Branches to CANCELLED from any pre-COMPLETED state. Never triggered by QR scan —
+        explicit confirmation only (FR-3.22 exclusion). COMPLETED/CANCELLED orders
+        return 409 `ORDER_TERMINAL`. CANCELLED bills still count toward the Free-plan
+        monthly bill limit (FR-8.3).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderCancelRequest'
+            example:
+              reason: Customer changed mind
+              occurredAt: "2026-08-01T09:00:00Z"
+      responses:
+        '200':
+          description: Order cancelled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Order already terminal.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  code: ORDER_TERMINAL
+                  message: COMPLETED orders cannot be cancelled.
+                  traceId: 5d0e93b7a41c268f
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  # ───────────────────────────── Payments ─────────────────────────────
+  /v1/orders/{orderId}/payments:
+    parameters:
+      - $ref: '#/components/parameters/orderId'
+    get:
+      operationId: listOrderPayments
+      tags: [Payments]
+      summary: Payment history for an order (chronological)
+      responses:
+        '200':
+          description: All payment rows, oldest first. Not paginated (bounded per order).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Payment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      operationId: appendPayment
+      tags: [Payments]
+      summary: Append a payment record (immutable)
+      description: |
+        Payments are append-only (FR-3.10): never updated, never deleted. A duplicate client
+        `id` is idempotently ignored and returns the stored row with 200. Corrections are new
+        **negative-amount** rows with method OTHER and a mandatory `note`. Split collections
+        are two calls (e.g. Rs 500 UPI + Rs 232 cash). Recording a payment that zeroes
+        `balanceDue` sets `promptComplete: true` in the response so clients can offer the
+        one-tap COMPLETED transition (FR-3.9). Overpayment beyond `balanceDue` returns 422
+        `OVERPAYMENT`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentCreate'
+            example:
+              id: 018f4a01-2b3c-7def-8a90-112233445566
+              amount: 83400
+              method: UPI
+              paidAt: "2026-08-02T12:01:30Z"
+              note: Balance at pickup
+      responses:
+        '201':
+          description: Payment appended; order money fields recomputed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentAppendResponse'
+              example:
+                payment:
+                  id: 018f4a01-2b3c-7def-8a90-112233445566
+                  orderId: 018f3b6e-7c2a-7d90-b1f4-9a2e0c5d8811
+                  amount: 83400
+                  method: UPI
+                  paidAt: "2026-08-02T12:01:30Z"
+                  note: Balance at pickup
+                  createdAt: "2026-08-02T12:01:31Z"
+                order:
+                  totalAmount: 133400
+                  advancePaid: 133400
+                  balanceDue: 0
+                  paymentStatus: PAID
+                promptComplete: true
+        '200':
+          description: Duplicate payment id — previously stored row returned unchanged (idempotent).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentAppendResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  # ───────────────────────────── Customers & khata ─────────────────────────────
+  /v1/customers:
+    get:
+      operationId: listCustomers
+      tags: [Customers]
+      summary: List customers (cursor-paginated)
+      parameters:
+        - $ref: '#/components/parameters/cursor'
+        - $ref: '#/components/parameters/limit'
+        - name: q
+          in: query
+          description: Search name or phone.
+          schema:
+            type: string
+            maxLength: 60
+        - name: hasOutstanding
+          in: query
+          description: Only customers with a non-zero credit (khata) balance.
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Page of customers.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, nextCursor]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Customer'
+                  nextCursor:
+                    type: [string, 'null']
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      operationId: createCustomer
+      tags: [Customers]
+      summary: Create a customer
+      description: Client supplies the UUIDv7 id (offline-creatable). Customers are per-tenant; there is no global customer identity (DPDP minimization).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerCreate'
+            example:
+              id: 018f3b6e-1111-7aaa-9c21-4d5e6f708192
+              name: Ramesh Joshi
+              phone: "+919876543210"
+      responses:
+        '201':
+          description: Customer created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Duplicate customer id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /v1/customers/{customerId}:
+    parameters:
+      - $ref: '#/components/parameters/customerId'
+    get:
+      operationId: getCustomer
+      tags: [Customers]
+      summary: Get a customer with khata balance
+      responses:
+        '200':
+          description: The customer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    patch:
+      operationId: updateCustomer
+      tags: [Customers]
+      summary: Update customer name/phone (last-write-wins)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerUpdate'
+      responses:
+        '200':
+          description: Updated customer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /v1/customers/{customerId}/ledger:
+    parameters:
+      - $ref: '#/components/parameters/customerId'
+    get:
+      operationId: listCreditLedger
+      tags: [Customers]
+      summary: Credit-ledger (khata) entries for a customer
+      description: Requires the CREDIT_LEDGER module; otherwise 403 `MODULE_DISABLED`. Newest first.
+      parameters:
+        - $ref: '#/components/parameters/cursor'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: Page of ledger entries.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, nextCursor]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CreditLedgerEntry'
+                  nextCursor:
+                    type: [string, 'null']
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      operationId: appendCreditLedgerEntry
+      tags: [Customers]
+      summary: Append a khata entry (append-only)
+      description: |
+        DEBIT = customer owes more (udhaar given); CREDIT = customer paid down.
+        `balanceAfter` is recomputed server-side and returned — a client-supplied value is
+        ignored (FR-7.11). Duplicate client `id` is idempotently ignored.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditLedgerEntryCreate'
+            example:
+              id: 018f4a02-99aa-7bbb-8ccc-ddeeff001122
+              type: DEBIT
+              amount: 25000
+              orderId: 018f3b6e-7c2a-7d90-b1f4-9a2e0c5d8811
+              note: Grocery udhaar
+      responses:
+        '201':
+          description: Entry appended with authoritative `balanceAfter`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditLedgerEntry'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  # ───────────────────────────── Sync ─────────────────────────────
+  /v1/sync:
+    post:
+      operationId: pushSyncBatch
+      tags: [Sync]
+      summary: Push a batch of offline ops (idempotent)
+      description: |
+        The Android app's **only** write path (FR-7.15). Up to **200 ops** per batch, applied
+        in order inside one transaction, each recorded in the server-side `sync_ops` ledger.
+        `batchSeq` is monotonically increasing per device.
+
+        The `Idempotency-Key` header is **required** — canonically a hash of
+        `deviceId + batchSeq`. Replaying a batch with the same key returns the stored per-op
+        results with `replayed: true` and does not re-apply anything (safe against network
+        timeouts).
+
+        Per-op results: `APPLIED`, `REJECTED` (with a `reason` code, e.g. state regression,
+        validation failure), or `SUPERSEDED` (a newer `clientUpdatedAt` already applied under
+        last-write-wins). Device clock skew beyond ±5 min substitutes the server timestamp and
+        flags the op via `clockSkewAdjusted: true`.
+
+        Rate limit 60/min. Oversized batches return 422 `BATCH_TOO_LARGE`; timestamp spoofing
+        beyond tolerance returns per-op rejections, not a batch failure.
+      parameters:
+        - $ref: '#/components/parameters/idempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncBatchRequest'
+            example:
+              deviceId: 8f14e45f-ceea-467f-a7e2-8b6f1a2c9d01
+              batchSeq: 412
+              ops:
+                - opId: 018f4a10-0001-7abc-8def-000000000001
+                  entityType: order
+                  entityId: 018f3b6e-7c2a-7d90-b1f4-9a2e0c5d8811
+                  op: UPSERT
+                  clientTs: "2026-07-31T13:12:42Z"
+                  payload:
+                    orderNo: PRNT-0231
+                    trackingToken: 7Kj2mQ9xLp4Wn8Rt3Vb6Yc
+                    module: CUSTOM_ORDER
+                    state: CREATED
+                    customerId: 018f3b6e-1111-7aaa-9c21-4d5e6f708192
+                    subtotal: 119000
+                    discountTotal: 5950
+                    taxableValue: 113050
+                    cgst: 10174
+                    sgst: 10174
+                    roundOff: 2
+                    totalAmount: 133400
+                    advancePaid: 50000
+                    clientUpdatedAt: "2026-07-31T13:12:42Z"
+                - opId: 018f4a10-0001-7abc-8def-000000000002
+                  entityType: payment
+                  entityId: 018f3b6e-7c2a-7d90-b1f4-9a2e0c5d8815
+                  op: UPSERT
+                  clientTs: "2026-07-31T13:12:42Z"
+                  payload:
+                    orderId: 018f3b6e-7c2a-7d90-b1f4-9a2e0c5d8811
+                    amount: 50000
+                    method: UPI
+                    paidAt: "2026-07-31T13:12:42Z"
+                    note: Advance at booking
+                - opId: 018f4a10-0001-7abc-8def-000000000003
+                  entityType: order_state
+                  entityId: 018f3b6e-7c2a-7d90-b1f4-9a2e0c5d8811
+                  op: UPSERT
+                  clientTs: "2026-08-01T10:05:00Z"
+                  payload:
+                    toState: IN_PROGRESS
+                    trigger: SHOP_COPY_SCAN
+                    occurredAt: "2026-08-01T10:05:00Z"
+      responses:
+        '200':
+          description: Per-op results in submission order.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncBatchResponse'
+              example:
+                batchSeq: 412
+                replayed: false
+                results:
+                  - opId: 018f4a10-0001-7abc-8def-000000000001
+                    result: APPLIED
+                    clockSkewAdjusted: false
+                  - opId: 018f4a10-0001-7abc-8def-000000000002
+                    result: APPLIED
+                    clockSkewAdjusted: false
+                  - opId: 018f4a10-0001-7abc-8def-000000000003
+                    result: REJECTED
+                    reason: STATE_REGRESSION
+                    serverState:
+                      state: READY
+                serverCursor: "c_000000000000A3F1"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Idempotency-Key reused with a different body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  code: IDEMPOTENCY_KEY_CONFLICT
+                  message: This Idempotency-Key was used with a different batch body.
+                  traceId: ab34cd56ef781290
+        '422':
+          description: Batch structurally invalid (e.g. over 200 ops).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  code: BATCH_TOO_LARGE
+                  message: A sync batch may contain at most 200 ops.
+                  traceId: 09f8e7d6c5b4a321
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /v1/sync/changes:
+    get:
+      operationId: pullSyncChanges
+      tags: [Sync]
+      summary: Delta pull of tenant rows since a cursor
+      description: |
+        Returns all tenant rows with `serverSeq > cursor` (per-tenant monotonic sequence
+        assigned on every write), max **500 rows** per page, plus the new cursor. Initial
+        install performs a full pull with `cursor=0`, paginated. Cursors are opaque —
+        clients must not parse them. Called after each push and on FCM nudge (FR-7.12).
+      parameters:
+        - name: cursor
+          in: query
+          required: true
+          description: Opaque server cursor from the previous pull, or "0" for a full initial pull.
+          schema:
+            type: string
+            maxLength: 64
+        - name: limit
+          in: query
+          description: Page size (max 500).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 500
+      responses:
+        '200':
+          description: Changed rows and the next cursor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncChangesResponse'
+              example:
+                changes:
+                  - entityType: order
+                    entityId: 018f3b6e-7c2a-7d90-b1f4-9a2e0c5d8811
+                    serverSeq: 41983
+                    deleted: false
+                    payload:
+                      orderNo: PRNT-0231
+                      state: READY
+                      displayStateLabel: Ready for Pickup
+                      paymentStatus: PARTIAL
+                      totalAmount: 133400
+                      advancePaid: 50000
+                      balanceDue: 83400
+                nextCursor: "c_000000000000A3F2"
+                hasMore: false
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  # ───────────────────────────── Public tracking ─────────────────────────────
+  /v1/public/track/{token}:
+    get:
+      operationId: getPublicTracking
+      tags: [Public]
+      summary: Public order-tracking projection (no auth)
+      description: |
+        The status JSON behind `https://track.bizbill.app/t/{token}`. The 22-char token is the
+        sole credential (capability URL). Resolution path: CDN edge cache → API pod → Redis
+        `track:{token}` (TTL 60 s) → Postgres index-only scan (FR-7.16).
+
+        **Caching (normative):** responses carry
+        `Cache-Control: public, max-age=60, s-maxage=60, stale-while-revalidate=300`.
+        Every state or payment-status change enqueues a Redis + CDN purge for `/t/{token}`
+        (< 5 s p95), so refreshing customers see updates near-instantly (FR-7.17).
+
+        **Privacy (FR-3.24 / FR-5.6):** customer name is masked ("R****h"), phone never
+        exposed, no internal notes/job specs, no other-party PII. Responses include
+        `X-Robots-Tag: noindex`. Not-found is byte-identical for malformed, unknown, and
+        banned-tenant tokens (no enumeration signal). CANCELLED orders show state and shop
+        contact only. Suspended tenants' pages stay live; banned tenants' pages return 404.
+
+        Rate limit: **60/min per IP** plus CDN bot filtering.
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          description: 22-char URL-safe base64 tracking token (A-Z a-z 0-9 - _).
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9_-]{22}$'
+      responses:
+        '200':
+          description: Tracking projection for exactly one order.
+          headers:
+            Cache-Control:
+              description: 'Always: `public, max-age=60, s-maxage=60, stale-while-revalidate=300`.'
+              schema:
+                type: string
+            X-Robots-Tag:
+              description: 'Always `noindex`.'
+              schema:
+                type: string
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrackingProjection'
+              example:
+                orderNo: PRNT-0231
+                state: IN_PROGRESS
+                displayStateLabel: Printing
+                paymentStatus: PARTIAL
+                shop:
+                  name: Sharma Printers
+                  city: Pune
+                  phone: "+919822012345"
+                  logoUrl: https://cdn.bizbill.app/logos/t_018f2211.png
+                customerRef: R****h
+                items:
+                  - name: Visiting Cards
+                    qty: "500"
+                  - name: Flex Banner 3x6
+                    qty: "1"
+                  - name: Design Charges
+                    qty: "1"
+                totalAmount: 133400
+                advancePaid: 50000
+                balanceDue: 83400
+                createdAt: "2026-07-31T13:12:42Z"
+                promisedReadyAt: "2026-08-02T11:30:00Z"
+                stateTimeline:
+                  - state: CREATED
+                    occurredAt: "2026-07-31T13:12:42Z"
+                  - state: IN_PROGRESS
+                    occurredAt: "2026-08-01T10:05:00Z"
+                lastUpdatedAt: "2026-08-01T10:05:00Z"
+                poweredByBranding: true
+        '404':
+          description: Order not found — identical for malformed, unknown, and banned-tenant tokens.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: Order not found.
+                  traceId: 44aa55bb66cc77dd
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  # ───────────────────────────── Reports ─────────────────────────────
+  /v1/reports/sales:
+    get:
+      operationId: getSalesReport
+      tags: [Reports]
+      summary: Daily sales report for a date range
+      description: |
+        Per-day totals plus range aggregate. Served from a read replica; nightly-aggregated
+        summary tables backstop long ranges. Free plan is limited to the trailing 7 days —
+        older ranges return 403 `PLAN_FEATURE_LOCKED` (FR-8.8). Rate limit 30/min.
+        Dates are interpreted in IST (Asia/Kolkata), the tenant's business day.
+      parameters:
+        - name: from
+          in: query
+          required: true
+          description: First business day (inclusive), IST.
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          description: Last business day (inclusive), IST.
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Daily sales rows plus totals.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalesReport'
+              example:
+                from: "2026-07-25"
+                to: "2026-07-31"
+                days:
+                  - date: "2026-07-31"
+                    billCount: 14
+                    grossSales: 1875000
+                    discountTotal: 43500
+                    gstCollected: 214300
+                    collected: 1560000
+                    outstandingDelta: 315000
+                    byMethod:
+                      CASH: 610000
+                      UPI: 890000
+                      CARD: 60000
+                      OTHER: 0
+                totals:
+                  billCount: 71
+                  grossSales: 9120000
+                  discountTotal: 187400
+                  gstCollected: 1042100
+                  collected: 8010500
+                  outstanding: 1109500
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /v1/reports/gst:
+    get:
+      operationId: getGstReport
+      tags: [Reports]
+      summary: GSTR-1-friendly GST summary for a date range
+      description: |
+        Requires a valid GSTIN on file (else 422 `GSTIN_REQUIRED`). Pro/Growth only
+        (403 `PLAN_FEATURE_LOCKED` on Free). `format=csv` streams a GSTR-1-friendly CSV
+        (FR-5.13); default JSON returns the same rows.
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [json, csv]
+            default: json
+      responses:
+        '200':
+          description: GST summary (JSON) or CSV stream.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GstReport'
+              example:
+                from: "2026-07-01"
+                to: "2026-07-31"
+                gstin: 27ABCDE1234F1Z5
+                invoices:
+                  - orderNo: PRNT-0231
+                    invoiceDate: "2026-07-31"
+                    customerGstin: null
+                    taxableValue: 113050
+                    cgst: 10174
+                    sgst: 10174
+                    invoiceTotal: 133400
+                hsnSummary:
+                  - hsnSac: "4911"
+                    description: Printed matter
+                    qty: "501"
+                    taxableValue: 93050
+                    cgst: 8374
+                    sgst: 8374
+                totals:
+                  taxableValue: 113050
+                  cgst: 10174
+                  sgst: 10174
+                  invoiceTotal: 133400
+            text/csv:
+              schema:
+                type: string
+                description: GSTR-1-friendly CSV; columns match the JSON invoice rows plus the HSN summary block.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /v1/reports/outstanding:
+    get:
+      operationId: getOutstandingReport
+      tags: [Reports]
+      summary: Outstanding balances (unpaid/partial orders + khata)
+      parameters:
+        - $ref: '#/components/parameters/cursor'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: Outstanding rows sorted by balance descending.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutstandingReport'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  # ───────────────────────────── Subscription ─────────────────────────────
+  /v1/subscription:
+    get:
+      operationId: getSubscription
+      tags: [Subscription]
+      summary: Current subscription, plan, and signed entitlement blob
+      description: |
+        Returns the subscription lifecycle state (Section 8.3) and the signed entitlement
+        blob (JWS, Ed25519) the app caches for offline enforcement (FR-8.9). Blob
+        `expiresAt` = current period end + 7-day grace; clients apply an additional 72-hour
+        offline grace before degrading to Free behaviour.
+      responses:
+        '200':
+          description: Subscription with entitlement blob.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+              example:
+                planCode: PRO
+                status: active
+                trialEndsAt: null
+                currentPeriodEnd: "2026-08-15T00:00:00Z"
+                billingInterval: MONTHLY
+                priceInr: 19900
+                entitlementBlob: eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJ0ZW5hbnRfaWQiOi...
+                entitlements:
+                  devices: 1
+                  billsPerMonth: null
+                  reportHistoryDays: null
+                  features: [PDF_INVOICE, GST_EXPORT, NO_BRANDING]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /v1/subscription/checkout:
+    post:
+      operationId: createCheckout
+      tags: [Subscription]
+      summary: Start a Razorpay Subscriptions checkout
+      description: |
+        Creates a Razorpay-hosted checkout session (UPI Autopay / cards / netbanking) for the
+        requested plan and interval, opened in a Chrome Custom Tab (Android) or new tab (web).
+        Upgrades are prorated and immediate; downgrades take effect at period end (FR-8.7).
+        Fulfilment is driven by the (out-of-contract) Razorpay webhook `POST /v1/webhooks/billing`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutRequest'
+            example:
+              planCode: PRO
+              interval: YEARLY
+              couponCode: DIWALI25
+      responses:
+        '201':
+          description: Checkout session created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutResponse'
+              example:
+                checkoutUrl: https://rzp.io/i/bizbill-pro-yr-8Xk2
+                razorpaySubscriptionId: sub_O4x1YzKq7RtLm2
+                expiresAt: "2026-07-31T14:00:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: A checkout for this tenant is already pending.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  # ───────────────────────────── Admin ─────────────────────────────
+  /v1/admin/tenants:
+    get:
+      operationId: adminListTenants
+      tags: [Admin]
+      summary: Tenant directory (search/filter)
+      description: |
+        Super Admin only (admin JWT with `admin_role`, TOTP-verified session, IP allowlist).
+        Every access is written to `audit_logs`. Rate limit 120/min.
+      security:
+        - adminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/cursor'
+        - $ref: '#/components/parameters/limit'
+        - name: q
+          in: query
+          description: Search by phone, shop name, or SHOPCODE.
+          schema:
+            type: string
+            maxLength: 60
+        - name: plan
+          in: query
+          schema:
+            $ref: '#/components/schemas/PlanCode'
+        - name: businessType
+          in: query
+          description: Business-type profile id (e.g. printing, kirana, pharmacy).
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [ACTIVE, TRIAL, SUSPENDED, BANNED]
+      responses:
+        '200':
+          description: Page of tenant directory rows.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, nextCursor]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminTenantSummary'
+                  nextCursor:
+                    type: [string, 'null']
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /v1/admin/tenants/{tenantId}:
+    parameters:
+      - $ref: '#/components/parameters/tenantId'
+    get:
+      operationId: adminGetTenant
+      tags: [Admin]
+      summary: Tenant detail (profile, subscription history, usage stats)
+      security:
+        - adminBearerAuth: []
+      responses:
+        '200':
+          description: Full tenant profile for the admin panel.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminTenantDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /v1/admin/tenants/{tenantId}/status:
+    parameters:
+      - $ref: '#/components/parameters/tenantId'
+    post:
+      operationId: adminSetTenantStatus
+      tags: [Admin]
+      summary: Suspend, unsuspend, or ban a tenant (FR-5.24)
+      description: |
+        `SUSPENDED` is reversible: merchant API access blocked, tracking pages stay live.
+        `BANNED` (Owner-only, reason required) additionally makes the tenant's tracking pages
+        return not-found. Both are audit-logged with the reason.
+      security:
+        - adminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminTenantStatusRequest'
+            example:
+              status: SUSPENDED
+              reason: Repeated chargeback fraud reports; under review.
+      responses:
+        '200':
+          description: Updated tenant status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminTenantSummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /v1/admin/tenants/{tenantId}/subscription:
+    parameters:
+      - $ref: '#/components/parameters/tenantId'
+    patch:
+      operationId: adminOverrideSubscription
+      tags: [Admin]
+      summary: Subscription override — comp, extend, plan override, refund record (FR-5.19, FR-8.12)
+      description: |
+        Supported actions: extend by N days, comp a plan (mandatory reason), record a refund
+        (entitlement revoked here; money movement executed in the provider console in MVP),
+        force-refresh the entitlement blob. Every change writes an immutable audit record.
+      security:
+        - adminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminSubscriptionOverrideRequest'
+            example:
+              action: COMP
+              planCode: PRO
+              days: 90
+              reason: Early-adopter goodwill after the July 12 sync outage.
+      responses:
+        '200':
+          description: Updated subscription.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /v1/admin/tenants/{tenantId}/impersonate:
+    parameters:
+      - $ref: '#/components/parameters/tenantId'
+    post:
+      operationId: adminImpersonateTenant
+      tags: [Admin]
+      summary: Start a read-only impersonation session (FR-5.20)
+      description: |
+        "View as tenant". Requires a mandatory `reason`. Returns a **read-only** scoped token
+        the admin panel uses to render the tenant's Merchant Web Panel; any write attempted
+        with it returns 403 `IMPERSONATION_READ_ONLY`. Session auto-expires after **30
+        minutes**; start/end and every page viewed are audit-logged (admin id, tenant id,
+        reason, timestamps).
+      security:
+        - adminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminImpersonateRequest'
+            example:
+              reason: 'Support ticket #4821 — merchant reports missing orders in panel.'
+      responses:
+        '201':
+          description: Impersonation session created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminImpersonateResponse'
+              example:
+                impersonationToken: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhZG1fMDEiLCJ0ZW5hbnRfaWQiOi...
+                tenantId: 018f2211-aaaa-7bbb-8ccc-1234567890ab
+                readOnly: true
+                expiresAt: "2026-07-31T14:12:00Z"
+                auditSessionId: 018f4a20-1111-7222-8333-444455556666
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /v1/admin/metrics:
+    get:
+      operationId: adminGetMetrics
+      tags: [Admin]
+      summary: Platform + revenue metrics (FR-5.17, FR-5.18, FR-8.14)
+      description: |
+        Point-in-time KPIs plus 90-day daily trend series. Revenue block: MRR and movement,
+        plan mix, trial-to-paid conversion, ARPU, churn by business type, dunning recovery.
+        Platform block: DAU merchants, bills/day, tracking scans/day, sync-failure rate,
+        API error rate.
+      security:
+        - adminBearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          description: Calendar month for the revenue block (defaults to current month, IST).
+          schema:
+            type: string
+            pattern: '^[0-9]{4}-[0-9]{2}$'
+            example: "2026-07"
+      responses:
+        '200':
+          description: Metrics snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMetrics'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Backend-issued access token from `POST /v1/auth/exchange` or `/v1/auth/refresh`.
+        Claims: `sub` (user id), `tenant_id`, `role` (OWNER in Phase 1). 15-minute lifetime;
+        clock-skew tolerance ±5 min.
+    adminBearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Super Admin token (Google Sign-In on the email allowlist + TOTP). Carries `admin_role`
+        and **no** `tenant_id`. Admin endpoints are additionally IP-allowlisted; every access
+        is audit-logged.
+
+  headers:
+    X-RateLimit-Limit:
+      description: Request quota for the current window for this endpoint class.
+      schema:
+        type: integer
+      example: 300
+    X-RateLimit-Remaining:
+      description: Requests remaining in the current window.
+      schema:
+        type: integer
+      example: 291
+    X-RateLimit-Reset:
+      description: Unix epoch seconds at which the current window resets.
+      schema:
+        type: integer
+      example: 1785503580
+    Retry-After:
+      description: Seconds to wait before retrying (sent on 429).
+      schema:
+        type: integer
+      example: 27
+
+  parameters:
+    cursor:
+      name: cursor
+      in: query
+      description: Opaque pagination cursor from the previous page's `nextCursor`. Omit for the first page.
+      schema:
+        type: string
+        maxLength: 256
+    limit:
+      name: limit
+      in: query
+      description: Page size.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 25
+    idempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        Client-chosen idempotency key — canonically `sha256(deviceId + ":" + batchSeq)` hex.
+        Replays with the same key return the stored result; the same key with a different
+        body returns 409 `IDEMPOTENCY_KEY_CONFLICT`. Keys are retained for 90 days.
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 128
+    productId:
+      name: productId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    orderId:
+      name: orderId
+      in: path
+      required: true
+      description: Client-generated UUIDv7 order id.
+      schema:
+        type: string
+        format: uuid
+    customerId:
+      name: customerId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    tenantId:
+      name: tenantId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Malformed request (JSON syntax, missing required fields, wrong types).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: VALIDATION_FAILED
+              message: Request body failed validation.
+              traceId: 0a1b2c3d4e5f6789
+              details:
+                fields:
+                  - path: items.0.qty
+                    message: must be a decimal string with at most 3 fraction digits
+    Unauthorized:
+      description: Missing, expired, or invalid bearer token.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: UNAUTHENTICATED
+              message: Access token missing or expired.
+              traceId: 99aabbccddeeff00
+    Forbidden:
+      description: Authenticated but not allowed (plan gate, disabled module, admin scope, impersonation write, suspended tenant).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: PLAN_FEATURE_LOCKED
+              message: GST export requires the Pro plan.
+              traceId: 1122334455667788
+    NotFound:
+      description: Resource does not exist within the caller's tenant scope.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: NOT_FOUND
+              message: Resource not found.
+              traceId: 8877665544332211
+    UnprocessableEntity:
+      description: Well-formed but semantically invalid (business-rule violation).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: AMOUNT_MISMATCH
+              message: totalAmount does not equal taxableValue + GST + roundOff per the FR-3.6 calculation.
+              traceId: aabb00112233ccdd
+    TooManyRequests:
+      description: Rate limit exceeded for this endpoint class.
+      headers:
+        Retry-After:
+          $ref: '#/components/headers/Retry-After'
+        X-RateLimit-Limit:
+          $ref: '#/components/headers/X-RateLimit-Limit'
+        X-RateLimit-Remaining:
+          $ref: '#/components/headers/X-RateLimit-Remaining'
+        X-RateLimit-Reset:
+          $ref: '#/components/headers/X-RateLimit-Reset'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: RATE_LIMITED
+              message: Too many requests; retry after 27 seconds.
+              traceId: fedcba9876543210
+
+  schemas:
+    # ───────── Enums (canonical — must match everywhere verbatim) ─────────
+    OrderState:
+      type: string
+      description: Canonical order lifecycle state. Monotonic forward; CANCELLED branches from any non-terminal state; COMPLETED and CANCELLED are terminal.
+      enum: [CREATED, IN_PROGRESS, READY, COMPLETED, CANCELLED]
+    PaymentStatus:
+      type: string
+      description: 'Derived, never set directly: UNPAID (advance 0), PARTIAL (0 < paid < total), PAID (balance 0).'
+      enum: [UNPAID, PARTIAL, PAID]
+    PaymentMethod:
+      type: string
+      enum: [CASH, UPI, CARD, OTHER]
+    OrderModule:
+      type: string
+      description: Which billing flow created the order.
+      enum: [CUSTOM_ORDER, QUICK_SALE]
+    ModuleCode:
+      type: string
+      description: Feature module identifiers (PRD Section 2). DELIVERY and APPOINTMENTS are Phase 2.
+      enum: [CUSTOM_ORDER, QUICK_SALE, CATALOG, INVENTORY, BATCH_EXPIRY, KOT_TOKEN, CREDIT_LEDGER, DELIVERY, APPOINTMENTS]
+    PlanCode:
+      type: string
+      enum: [FREE, PRO, GROWTH]
+    SubscriptionStatus:
+      type: string
+      description: Lifecycle per PRD Section 8.3.
+      enum: [trialing, active, past_due, suspended, cancelled]
+    StateTrigger:
+      type: string
+      description: What caused a state transition (FR-3.21).
+      enum: [APP_BUTTON, SHOP_COPY_SCAN, PICKUP_SCAN, AUTO]
+    GstRate:
+      type: integer
+      description: GST percent slab.
+      enum: [0, 5, 12, 18, 28]
+
+    # ───────── Shared error envelope ─────────
+    ErrorEnvelope:
+      type: object
+      description: |
+        The single error shape for every non-2xx response. `code` is machine-readable and
+        stable (see docs/api/README.md for the full code table); `message` is for developers,
+        not end users; `traceId` correlates with server logs/OTel traces.
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, traceId]
+          properties:
+            code:
+              type: string
+              description: Stable machine-readable error code, SCREAMING_SNAKE_CASE.
+              examples: [VALIDATION_FAILED, STATE_REGRESSION, PLAN_FEATURE_LOCKED]
+            message:
+              type: string
+              description: Human-readable developer message. Never contains PII.
+            traceId:
+              type: string
+              description: Correlation id present in structured logs and traces.
+            details:
+              type: object
+              description: Optional structured context (field errors, current server state, limits).
+              additionalProperties: true
+
+    # ───────── Common value objects ─────────
+    Money:
+      type: integer
+      description: Amount in integer paise (Rs 1,334.00 = 133400). May be negative only where documented (correction payments).
+      minimum: -100000000000
+      maximum: 100000000000
+    Qty:
+      type: string
+      description: Decimal quantity with up to 3 fraction places (kg/metre sales), serialized as a string to avoid float drift, e.g. "1.250".
+      pattern: '^-?[0-9]{1,9}(\.[0-9]{1,3})?$'
+    Address:
+      type: object
+      properties:
+        lines:
+          type: array
+          items:
+            type: string
+            maxLength: 120
+          maxItems: 3
+        city:
+          type: string
+          maxLength: 60
+        pinCode:
+          type: string
+          pattern: '^[1-9][0-9]{5}$'
+        state:
+          type: string
+          description: Indian state code (e.g. MH, KA).
+          maxLength: 2
+    Discount:
+      type: object
+      description: Percent or flat-rupee discount; the two kinds are mutually exclusive per application point (FR-3.1/FR-3.2).
+      required: [kind, value]
+      properties:
+        kind:
+          type: string
+          enum: [PERCENT, FLAT]
+        value:
+          type: integer
+          description: PERCENT — basis points (500 = 5%). FLAT — paise.
+          minimum: 0
+
+    # ───────── Auth ─────────
+    DeviceInfo:
+      type: object
+      required: [deviceId, platform]
+      properties:
+        deviceId:
+          type: string
+          format: uuid
+          description: Stable client-generated device identifier.
+        platform:
+          type: string
+          enum: [ANDROID, WEB]
+        model:
+          type: string
+          maxLength: 80
+        osVersion:
+          type: string
+          maxLength: 20
+        appVersion:
+          type: string
+          maxLength: 20
+        fcmToken:
+          type: [string, 'null']
+          description: FCM registration token (Android only).
+          maxLength: 512
+    AuthExchangeRequest:
+      type: object
+      required: [firebaseIdToken, device]
+      properties:
+        firebaseIdToken:
+          type: string
+          description: Firebase ID token from Phone OTP or Google Sign-In.
+          maxLength: 4096
+        device:
+          $ref: '#/components/schemas/DeviceInfo'
+        tenantId:
+          type: [string, 'null']
+          format: uuid
+          description: Requested active tenant for multi-tenant users; defaults to the sole/last-active tenant.
+    TokenPair:
+      type: object
+      required: [accessToken, accessTokenExpiresIn, refreshToken, refreshTokenExpiresIn]
+      properties:
+        accessToken:
+          type: string
+          description: JWT, 15-minute lifetime.
+        accessTokenExpiresIn:
+          type: integer
+          description: Seconds until access-token expiry (900).
+        refreshToken:
+          type: string
+          description: Opaque rotating refresh token, 30-day lifetime, single-use.
+        refreshTokenExpiresIn:
+          type: integer
+          description: Seconds until refresh-token expiry (2592000).
+    AuthExchangeResponse:
+      allOf:
+        - $ref: '#/components/schemas/TokenPair'
+        - type: object
+          required: [user, tenants, isNewUser]
+          properties:
+            user:
+              $ref: '#/components/schemas/User'
+            tenants:
+              type: array
+              description: Every tenant this user belongs to (tenant switcher, FR-6.8). Empty for a brand-new user pre-onboarding.
+              items:
+                $ref: '#/components/schemas/TenantMembership'
+            isNewUser:
+              type: boolean
+              description: True when this login created the User — client starts the onboarding wizard.
+    AuthRefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+    User:
+      type: object
+      required: [id, phone]
+      properties:
+        id:
+          type: string
+          format: uuid
+        phone:
+          type: string
+          description: E.164, primary identity key.
+          pattern: '^\+[1-9][0-9]{6,14}$'
+        email:
+          type: [string, 'null']
+          format: email
+          description: Linked Google account email, if any.
+        name:
+          type: [string, 'null']
+          maxLength: 80
+        locale:
+          type: string
+          default: en
+    TenantMembership:
+      type: object
+      required: [tenantId, shopName, shopcode, role]
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+        shopName:
+          type: string
+        shopcode:
+          type: string
+        role:
+          type: string
+          description: OWNER in Phase 1; MANAGER/CASHIER arrive in Phase 2.
+          enum: [OWNER, MANAGER, CASHIER]
+
+    # ───────── Tenant ─────────
+    Tenant:
+      type: object
+      required: [id, shopName, shopcode, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        shopName:
+          type: string
+          maxLength: 80
+        shopcode:
+          type: string
+          description: 3-6 chars A-Z/0-9; drives the Order No format {SHOPCODE}-{NNNN}. Immutable after onboarding.
+          pattern: '^[A-Z0-9]{3,6}$'
+        gstin:
+          type: [string, 'null']
+          description: 15-char GSTIN; null until saved. GST invoice lines render only when set (FR-3.4).
+          pattern: '^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$'
+        upiVpa:
+          type: [string, 'null']
+          description: Merchant VPA for Payment QR (upi://pay deep link). Null disables Payment QR printing.
+          pattern: '^[a-zA-Z0-9._-]{2,49}@[a-zA-Z]{2,20}$'
+        upiVpaVerified:
+          type: boolean
+          description: Self-attested Rs.1 test-QR verification (onboarding step 5).
+        billPhone:
+          type: [string, 'null']
+          description: Phone printed on bills (may differ from login phone).
+          pattern: '^\+[1-9][0-9]{6,14}$'
+        address:
+          $ref: '#/components/schemas/Address'
+        logoUrl:
+          type: [string, 'null']
+          format: uri
+        fssaiLicense:
+          type: [string, 'null']
+          description: FSSAI licence (Fast Food/QSR, Kirana), printed when set.
+          maxLength: 20
+        drugLicenseNo:
+          type: [string, 'null']
+          description: Drug Licence No (Pharmacy), printed when set.
+          maxLength: 40
+        taxInclusivePricing:
+          type: boolean
+          description: 'Shop-level toggle: true = tax back-calculated from entered prices (default); false = tax added on top (FR-3.3).'
+          default: true
+        status:
+          type: string
+          enum: [ACTIVE, TRIAL, SUSPENDED, BANNED]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    TenantUpdate:
+      type: object
+      description: Any subset of the editable fields; omitted fields are unchanged. `shopcode` is not editable.
+      minProperties: 1
+      properties:
+        shopName:
+          type: string
+          maxLength: 80
+        gstin:
+          type: [string, 'null']
+          pattern: '^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$'
+        upiVpa:
+          type: [string, 'null']
+          pattern: '^[a-zA-Z0-9._-]{2,49}@[a-zA-Z]{2,20}$'
+        billPhone:
+          type: [string, 'null']
+          pattern: '^\+[1-9][0-9]{6,14}$'
+        address:
+          $ref: '#/components/schemas/Address'
+        logoUrl:
+          type: [string, 'null']
+          format: uri
+        fssaiLicense:
+          type: [string, 'null']
+          maxLength: 20
+        drugLicenseNo:
+          type: [string, 'null']
+          maxLength: 40
+        taxInclusivePricing:
+          type: boolean
+    BusinessProfile:
+      type: object
+      required: [tenantId, businessType, profileVersion, modules, displayStateLabels]
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+        businessType:
+          type: string
+          description: Business-type profile id (config/profiles), e.g. printing, kirana, pharmacy, tailor, fastfood, laundry, mobile-repair, photo-studio.
+        profileVersion:
+          type: integer
+          minimum: 1
+        modules:
+          type: object
+          description: Enabled flag per module code.
+          additionalProperties:
+            type: boolean
+          propertyNames:
+            $ref: '#/components/schemas/ModuleCode'
+        nicheConfig:
+          type: object
+          description: Declarative field-pack schema for orders.customFields / items.itemCustomFields (validated server-side against this).
+          additionalProperties: true
+        displayStateLabels:
+          type: object
+          description: 'Niche label per canonical state, e.g. {"IN_PROGRESS": "Stitching"}. Keys are canonical states.'
+          additionalProperties:
+            type: string
+            maxLength: 30
+          propertyNames:
+            $ref: '#/components/schemas/OrderState'
+    BusinessProfileUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        businessType:
+          type: string
+          description: Switching applies the new preset non-destructively.
+        modules:
+          type: object
+          description: Partial toggle map; only listed modules change.
+          additionalProperties:
+            type: boolean
+          propertyNames:
+            $ref: '#/components/schemas/ModuleCode'
+        displayStateLabels:
+          type: object
+          additionalProperties:
+            type: [string, 'null']
+            maxLength: 30
+          propertyNames:
+            $ref: '#/components/schemas/OrderState'
+    ShopcodeCheckRequest:
+      type: object
+      required: [shopcode]
+      properties:
+        shopcode:
+          type: string
+          pattern: '^[A-Z0-9]{3,6}$'
+    ShopcodeCheckResponse:
+      type: object
+      required: [shopcode, available, suggestions]
+      properties:
+        shopcode:
+          type: string
+        available:
+          type: boolean
+        suggestions:
+          type: array
+          description: Up to 3 available alternatives when taken; empty when available.
+          items:
+            type: string
+          maxItems: 3
+
+    # ───────── Catalog ─────────
+    Product:
+      type: object
+      required: [id, name, price, gstRate, trackInventory, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 120
+        sku:
+          type: [string, 'null']
+          maxLength: 40
+        price:
+          $ref: '#/components/schemas/Money'
+        unit:
+          type: [string, 'null']
+          description: Sale unit label (pc, kg, metre, pack...).
+          maxLength: 20
+        hsnSac:
+          type: [string, 'null']
+          description: HSN (goods) or SAC (services) code, 4-8 digits.
+          pattern: '^[0-9]{4,8}$'
+        gstRate:
+          $ref: '#/components/schemas/GstRate'
+        trackInventory:
+          type: boolean
+          description: INVENTORY module — decrements stockQty on sale.
+        stockQty:
+          type: [string, 'null']
+          description: Current stock as a decimal string (3 places); null when not tracked.
+          pattern: '^-?[0-9]{1,9}(\.[0-9]{1,3})?$'
+        lowStockThreshold:
+          type: [string, 'null']
+          pattern: '^[0-9]{1,9}(\.[0-9]{1,3})?$'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type: [string, 'null']
+          format: date-time
+          description: Tombstone timestamp; non-null rows are excluded from default listings.
+    ProductCreate:
+      type: object
+      required: [name, price, gstRate]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Optional client-generated UUIDv7 (offline creation); server generates when omitted.
+        name:
+          type: string
+          maxLength: 120
+        sku:
+          type: [string, 'null']
+          maxLength: 40
+        price:
+          $ref: '#/components/schemas/Money'
+        unit:
+          type: [string, 'null']
+          maxLength: 20
+        hsnSac:
+          type: [string, 'null']
+          pattern: '^[0-9]{4,8}$'
+        gstRate:
+          $ref: '#/components/schemas/GstRate'
+        trackInventory:
+          type: boolean
+          default: false
+        stockQty:
+          type: [string, 'null']
+          pattern: '^-?[0-9]{1,9}(\.[0-9]{1,3})?$'
+        lowStockThreshold:
+          type: [string, 'null']
+          pattern: '^[0-9]{1,9}(\.[0-9]{1,3})?$'
+    ProductUpdate:
+      type: object
+      description: Any subset of ProductCreate fields except `id`.
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        sku:
+          type: [string, 'null']
+          maxLength: 40
+        price:
+          $ref: '#/components/schemas/Money'
+        unit:
+          type: [string, 'null']
+          maxLength: 20
+        hsnSac:
+          type: [string, 'null']
+          pattern: '^[0-9]{4,8}$'
+        gstRate:
+          $ref: '#/components/schemas/GstRate'
+        trackInventory:
+          type: boolean
+        stockQty:
+          type: [string, 'null']
+          pattern: '^-?[0-9]{1,9}(\.[0-9]{1,3})?$'
+        lowStockThreshold:
+          type: [string, 'null']
+          pattern: '^[0-9]{1,9}(\.[0-9]{1,3})?$'
+    StockBatch:
+      type: object
+      required: [id, productId, batchNo, expiryDate, qty, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        batchNo:
+          type: string
+          maxLength: 40
+        expiryDate:
+          type: string
+          format: date
+        qty:
+          type: string
+          description: Units remaining in this batch (decimal string).
+          pattern: '^[0-9]{1,9}(\.[0-9]{1,3})?$'
+        mrp:
+          type: [integer, 'null']
+          description: Printed MRP in paise.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    StockBatchCreate:
+      type: object
+      required: [batchNo, expiryDate, qty]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Optional client UUIDv7.
+        batchNo:
+          type: string
+          maxLength: 40
+        expiryDate:
+          type: string
+          format: date
+        qty:
+          type: string
+          pattern: '^[0-9]{1,9}(\.[0-9]{1,3})?$'
+        mrp:
+          type: [integer, 'null']
+
+    # ───────── Orders ─────────
+    OrderItem:
+      type: object
+      required: [id, description, qty, unitPrice, gstRate, lineTotal]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Client-generated UUIDv7.
+        productId:
+          type: [string, 'null']
+          format: uuid
+          description: Null for free-text ad-hoc lines (always allowed, FR-3.1).
+        description:
+          type: string
+          maxLength: 160
+        qty:
+          $ref: '#/components/schemas/Qty'
+        unitPrice:
+          $ref: '#/components/schemas/Money'
+        gstRate:
+          $ref: '#/components/schemas/GstRate'
+        hsnSac:
+          type: [string, 'null']
+          pattern: '^[0-9]{4,8}$'
+        lineDiscount:
+          oneOf:
+            - $ref: '#/components/schemas/Discount'
+            - type: 'null'
+        lineTotal:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: qty × unitPrice − lineDiscount (FR-3.6 step 1). Server-verified.
+        itemCustomFields:
+          type: object
+          description: Niche field-pack values validated against the tenant's nicheConfig.
+          additionalProperties: true
+    OrderAmounts:
+      type: object
+      description: The deterministic FR-3.6 money block. All fields integer paise; server re-computes and rejects mismatches with 422 AMOUNT_MISMATCH.
+      required: [subtotal, discountTotal, taxableValue, cgst, sgst, roundOff, totalAmount, advancePaid]
+      properties:
+        subtotal:
+          allOf: [{ $ref: '#/components/schemas/Money' }]
+          description: Σ line totals (step 2).
+        discountTotal:
+          allOf: [{ $ref: '#/components/schemas/Money' }]
+          description: Computed rupee value of the bill-level discount (step 3).
+        taxableValue:
+          allOf: [{ $ref: '#/components/schemas/Money' }]
+          description: subtotal − bill discount (step 4).
+        cgst:
+          allOf: [{ $ref: '#/components/schemas/Money' }]
+          description: Σ per-line gstRate/2 (step 5). Zero when no GSTIN on file.
+        sgst:
+          allOf: [{ $ref: '#/components/schemas/Money' }]
+          description: Mirror of cgst (intra-state split; IGST out of MVP scope).
+        roundOff:
+          type: integer
+          description: Signed nearest-rupee adjustment in paise, −49..+50 (step 6).
+          minimum: -49
+          maximum: 50
+        totalAmount:
+          allOf: [{ $ref: '#/components/schemas/Money' }]
+          description: taxableValue + GST ± roundOff (step 7). Grand total.
+        advancePaid:
+          allOf: [{ $ref: '#/components/schemas/Money' }]
+          description: Sum of recorded payments, 0..totalAmount.
+    StateHistoryEntry:
+      type: object
+      required: [toState, actor, trigger, occurredAt]
+      properties:
+        fromState:
+          oneOf:
+            - $ref: '#/components/schemas/OrderState'
+            - type: 'null'
+          description: Null for the initial CREATED entry.
+        toState:
+          $ref: '#/components/schemas/OrderState'
+        actor:
+          type: string
+          enum: [MERCHANT, SYSTEM, ADMIN]
+        trigger:
+          $ref: '#/components/schemas/StateTrigger'
+        occurredAt:
+          type: string
+          format: date-time
+          description: Device-clock time of the transition (FR-3.21).
+    Order:
+      allOf:
+        - $ref: '#/components/schemas/OrderAmounts'
+        - type: object
+          required: [id, orderNo, trackingToken, trackingUrl, module, state, paymentStatus, balanceDue, items, payments, stateHistory, createdAt, updatedAt]
+          properties:
+            id:
+              type: string
+              format: uuid
+              description: Client-generated UUIDv7 (FR-7.6).
+            orderNo:
+              type: string
+              description: '{SHOPCODE}-{NNNN}, device-allocated monotonic counter (FR-3.11), e.g. PRNT-0231. 4 digits zero-padded, naturally expanding past 9999.'
+              pattern: '^[A-Z0-9]{3,6}-[0-9]{4,}$'
+            trackingToken:
+              type: string
+              description: 22-char URL-safe base64, device-generated with SecureRandom (~131 bits). Unique platform-wide.
+              pattern: '^[A-Za-z0-9_-]{22}$'
+            trackingUrl:
+              type: string
+              format: uri
+              description: 'Always https://track.bizbill.app/t/{trackingToken}. Server-derived convenience field.'
+            module:
+              $ref: '#/components/schemas/OrderModule'
+            state:
+              $ref: '#/components/schemas/OrderState'
+            displayStateLabel:
+              type: [string, 'null']
+              description: Niche label for the current state from the tenant's business profile.
+            paymentStatus:
+              $ref: '#/components/schemas/PaymentStatus'
+            balanceDue:
+              allOf: [{ $ref: '#/components/schemas/Money' }]
+              description: Derived — totalAmount − advancePaid. Never independently editable (FR-3.7).
+            customerId:
+              type: [string, 'null']
+              format: uuid
+            billDiscount:
+              oneOf:
+                - $ref: '#/components/schemas/Discount'
+                - type: 'null'
+            items:
+              type: array
+              minItems: 1
+              items:
+                $ref: '#/components/schemas/OrderItem'
+            payments:
+              type: array
+              description: Append-only payment rows, oldest first.
+              items:
+                $ref: '#/components/schemas/Payment'
+            stateHistory:
+              type: array
+              description: Full transition history (feeds the tracking timeline).
+              items:
+                $ref: '#/components/schemas/StateHistoryEntry'
+            customFields:
+              type: object
+              description: Order-level niche field-pack values (JSONB), validated against nicheConfig.
+              additionalProperties: true
+            notes:
+              type: [string, 'null']
+              description: Internal notes / job specs. Never exposed on the tracking page.
+              maxLength: 2000
+            promisedReadyAt:
+              type: [string, 'null']
+              format: date-time
+              description: Promised/expected ready date shown on receipt and tracking page.
+            cancelReason:
+              type: [string, 'null']
+              maxLength: 200
+            deviceId:
+              type: [string, 'null']
+              format: uuid
+              description: Originating device.
+            clientUpdatedAt:
+              type: [string, 'null']
+              format: date-time
+              description: Last-write-wins conflict timestamp (FR-7.11).
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+            deletedAt:
+              type: [string, 'null']
+              format: date-time
+    OrderSummary:
+      type: object
+      description: List-projection for the orders table (panel "Orders & Invoices" columns).
+      required: [id, orderNo, module, state, paymentStatus, totalAmount, balanceDue, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        orderNo:
+          type: string
+        module:
+          $ref: '#/components/schemas/OrderModule'
+        state:
+          $ref: '#/components/schemas/OrderState'
+        displayStateLabel:
+          type: [string, 'null']
+        paymentStatus:
+          $ref: '#/components/schemas/PaymentStatus'
+        totalAmount:
+          $ref: '#/components/schemas/Money'
+        balanceDue:
+          $ref: '#/components/schemas/Money'
+        customerId:
+          type: [string, 'null']
+          format: uuid
+        customerName:
+          type: [string, 'null']
+          description: Masked until row expansion in the panel UI; API returns the full name (panel masks client-side).
+        itemsSummary:
+          type: string
+          description: 'Comma-joined first item names, e.g. "Visiting Cards, Flex Banner 3x6 +1".'
+        promisedReadyAt:
+          type: [string, 'null']
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    OrderCreate:
+      allOf:
+        - $ref: '#/components/schemas/OrderAmounts'
+        - type: object
+          required: [id, orderNo, trackingToken, module, items, clientUpdatedAt]
+          properties:
+            id:
+              type: string
+              format: uuid
+              description: Client-generated UUIDv7 — authoritative, never rewritten (FR-3.14).
+            orderNo:
+              type: string
+              pattern: '^[A-Z0-9]{3,6}-[0-9]{4,}$'
+            trackingToken:
+              type: string
+              pattern: '^[A-Za-z0-9_-]{22}$'
+            module:
+              $ref: '#/components/schemas/OrderModule'
+            customerId:
+              type: [string, 'null']
+              format: uuid
+            billDiscount:
+              oneOf:
+                - $ref: '#/components/schemas/Discount'
+                - type: 'null'
+            items:
+              type: array
+              minItems: 1
+              maxItems: 200
+              items:
+                $ref: '#/components/schemas/OrderItem'
+            advanceMethod:
+              oneOf:
+                - $ref: '#/components/schemas/PaymentMethod'
+                - type: 'null'
+              description: Method for the advance payment row created when advancePaid > 0.
+            customFields:
+              type: object
+              additionalProperties: true
+            notes:
+              type: [string, 'null']
+              maxLength: 2000
+            promisedReadyAt:
+              type: [string, 'null']
+              format: date-time
+            deviceId:
+              type: [string, 'null']
+              format: uuid
+            clientUpdatedAt:
+              type: string
+              format: date-time
+    OrderUpdate:
+      allOf:
+        - type: object
+          required: [clientUpdatedAt]
+          properties:
+            customerId:
+              type: [string, 'null']
+              format: uuid
+            billDiscount:
+              oneOf:
+                - $ref: '#/components/schemas/Discount'
+                - type: 'null'
+            items:
+              type: array
+              description: Full replacement of the item list when present.
+              minItems: 1
+              maxItems: 200
+              items:
+                $ref: '#/components/schemas/OrderItem'
+            subtotal:
+              $ref: '#/components/schemas/Money'
+            discountTotal:
+              $ref: '#/components/schemas/Money'
+            taxableValue:
+              $ref: '#/components/schemas/Money'
+            cgst:
+              $ref: '#/components/schemas/Money'
+            sgst:
+              $ref: '#/components/schemas/Money'
+            roundOff:
+              type: integer
+              minimum: -49
+              maximum: 50
+            totalAmount:
+              $ref: '#/components/schemas/Money'
+            customFields:
+              type: object
+              additionalProperties: true
+            notes:
+              type: [string, 'null']
+              maxLength: 2000
+            promisedReadyAt:
+              type: [string, 'null']
+              format: date-time
+            clientUpdatedAt:
+              type: string
+              format: date-time
+              description: Required — drives last-write-wins.
+    OrderStateTransitionRequest:
+      type: object
+      required: [toState, trigger]
+      properties:
+        toState:
+          type: string
+          description: Target forward state. CANCELLED is rejected here — use /cancel.
+          enum: [IN_PROGRESS, READY, COMPLETED]
+        trigger:
+          $ref: '#/components/schemas/StateTrigger'
+        confirmSkip:
+          type: boolean
+          default: false
+          description: Must be true when skipping intermediate states (e.g. CREATED → COMPLETED); skips are APP_BUTTON-only (FR-3.22).
+        occurredAt:
+          type: string
+          format: date-time
+          description: Device-clock transition time; defaults to server now.
+    OrderCancelRequest:
+      type: object
+      properties:
+        reason:
+          type: [string, 'null']
+          maxLength: 200
+        occurredAt:
+          type: string
+          format: date-time
+
+    # ───────── Payments ─────────
+    Payment:
+      type: object
+      required: [id, orderId, amount, method, paidAt, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Client-generated UUIDv7; duplicate ids are idempotently ignored.
+        orderId:
+          type: string
+          format: uuid
+        amount:
+          allOf: [{ $ref: '#/components/schemas/Money' }]
+          description: Positive normally; negative only for OTHER-method correction rows (FR-3.10).
+        method:
+          $ref: '#/components/schemas/PaymentMethod'
+        paidAt:
+          type: string
+          format: date-time
+          description: Device-observed collection time.
+        note:
+          type: [string, 'null']
+          maxLength: 200
+          description: Mandatory when amount is negative (correction audit trail).
+        createdAt:
+          type: string
+          format: date-time
+    PaymentCreate:
+      type: object
+      required: [id, amount, method, paidAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        amount:
+          $ref: '#/components/schemas/Money'
+        method:
+          $ref: '#/components/schemas/PaymentMethod'
+        paidAt:
+          type: string
+          format: date-time
+        note:
+          type: [string, 'null']
+          maxLength: 200
+    PaymentAppendResponse:
+      type: object
+      required: [payment, order, promptComplete]
+      properties:
+        payment:
+          $ref: '#/components/schemas/Payment'
+        order:
+          type: object
+          description: Recomputed money fields after the append.
+          required: [totalAmount, advancePaid, balanceDue, paymentStatus]
+          properties:
+            totalAmount:
+              $ref: '#/components/schemas/Money'
+            advancePaid:
+              $ref: '#/components/schemas/Money'
+            balanceDue:
+              $ref: '#/components/schemas/Money'
+            paymentStatus:
+              $ref: '#/components/schemas/PaymentStatus'
+        promptComplete:
+          type: boolean
+          description: True when this payment zeroed balanceDue — client offers one-tap COMPLETED (FR-3.9).
+
+    # ───────── Customers & khata ─────────
+    Customer:
+      type: object
+      required: [id, name, creditBalance, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 80
+        phone:
+          type: [string, 'null']
+          pattern: '^\+[1-9][0-9]{6,14}$'
+        creditBalance:
+          allOf: [{ $ref: '#/components/schemas/Money' }]
+          description: Outstanding khata balance the customer owes (positive = owes the shop).
+        totalBusiness:
+          allOf: [{ $ref: '#/components/schemas/Money' }]
+          description: Lifetime billed amount (panel Customers screen).
+        lastVisitAt:
+          type: [string, 'null']
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type: [string, 'null']
+          format: date-time
+    CustomerCreate:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Client-generated UUIDv7.
+        name:
+          type: string
+          maxLength: 80
+        phone:
+          type: [string, 'null']
+          pattern: '^\+[1-9][0-9]{6,14}$'
+    CustomerUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          maxLength: 80
+        phone:
+          type: [string, 'null']
+          pattern: '^\+[1-9][0-9]{6,14}$'
+        clientUpdatedAt:
+          type: string
+          format: date-time
+    CreditLedgerEntry:
+      type: object
+      required: [id, customerId, type, amount, balanceAfter, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+          format: uuid
+        orderId:
+          type: [string, 'null']
+          format: uuid
+          description: Linked order for credit sales; null for standalone khata entries.
+        type:
+          type: string
+          enum: [DEBIT, CREDIT]
+          description: DEBIT = customer owes more; CREDIT = customer paid down.
+        amount:
+          allOf: [{ $ref: '#/components/schemas/Money' }]
+          description: Always positive; direction comes from `type`.
+        balanceAfter:
+          allOf: [{ $ref: '#/components/schemas/Money' }]
+          description: Authoritative running balance, recomputed server-side (FR-7.11).
+        note:
+          type: [string, 'null']
+          maxLength: 200
+        createdAt:
+          type: string
+          format: date-time
+    CreditLedgerEntryCreate:
+      type: object
+      required: [id, type, amount]
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [DEBIT, CREDIT]
+        amount:
+          allOf: [{ $ref: '#/components/schemas/Money' }]
+          description: Positive paise.
+        orderId:
+          type: [string, 'null']
+          format: uuid
+        note:
+          type: [string, 'null']
+          maxLength: 200
+
+    # ───────── Sync ─────────
+    SyncOp:
+      type: object
+      required: [opId, entityType, entityId, op, clientTs, payload]
+      properties:
+        opId:
+          type: string
+          format: uuid
+          description: UUIDv7 per op (FR-7.9). The dedupe key within and across batches.
+        entityType:
+          type: string
+          description: Entity class the op targets. `order_state` carries state transitions so the server can run the monotonic-forward engine.
+          enum: [order, order_item, order_state, payment, customer, credit_ledger_entry, product, stock_batch, print_log]
+        entityId:
+          type: string
+          format: uuid
+          description: Client UUIDv7 of the target row (for order_state, the order id).
+        op:
+          type: string
+          enum: [UPSERT, DELETE]
+          description: DELETE writes a tombstone (deletedAt), never a hard delete.
+        clientTs:
+          type: string
+          format: date-time
+          description: Device clock at mutation time. Skew beyond ±5 min is replaced by server time and flagged.
+        payload:
+          type: object
+          description: Entity fields (camelCase, same shapes as the REST schemas). Empty object for DELETE.
+          additionalProperties: true
+    SyncBatchRequest:
+      type: object
+      required: [deviceId, batchSeq, ops]
+      properties:
+        deviceId:
+          type: string
+          format: uuid
+        batchSeq:
+          type: integer
+          minimum: 1
+          description: Monotonically increasing per device. Gaps allowed; regressions rejected.
+        ops:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            $ref: '#/components/schemas/SyncOp'
+    SyncOpResult:
+      type: object
+      required: [opId, result]
+      properties:
+        opId:
+          type: string
+          format: uuid
+        result:
+          type: string
+          enum: [APPLIED, REJECTED, SUPERSEDED]
+        reason:
+          type: [string, 'null']
+          description: Machine-readable rejection reason (e.g. STATE_REGRESSION, VALIDATION_FAILED, AMOUNT_MISMATCH, DUPLICATE_ORDER_NO, TOKEN_COLLISION, UNKNOWN_ENTITY). Null when APPLIED.
+        clockSkewAdjusted:
+          type: boolean
+          default: false
+          description: True when clientTs exceeded ±5 min skew and the server substituted its own timestamp.
+        serverState:
+          type: [object, 'null']
+          description: On REJECTED/SUPERSEDED — the authoritative server fields the client must reconcile to (e.g. the winning order state).
+          additionalProperties: true
+    SyncBatchResponse:
+      type: object
+      required: [batchSeq, replayed, results, serverCursor]
+      properties:
+        batchSeq:
+          type: integer
+        replayed:
+          type: boolean
+          description: True when this Idempotency-Key was already processed — results are the stored originals.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyncOpResult'
+        serverCursor:
+          type: string
+          description: Current tenant cursor; passing it to GET /v1/sync/changes pulls everything including this batch's effects.
+    SyncChange:
+      type: object
+      required: [entityType, entityId, serverSeq, deleted, payload]
+      properties:
+        entityType:
+          type: string
+          enum: [order, order_item, payment, customer, credit_ledger_entry, product, stock_batch, business_profile, tenant, subscription]
+        entityId:
+          type: string
+          format: uuid
+        serverSeq:
+          type: integer
+          description: Per-tenant monotonic write sequence (FR-7.12).
+        deleted:
+          type: boolean
+          description: True for tombstones — client soft-deletes the local row.
+        payload:
+          type: object
+          description: Full current entity row (camelCase). Empty for tombstones.
+          additionalProperties: true
+    SyncChangesResponse:
+      type: object
+      required: [changes, nextCursor, hasMore]
+      properties:
+        changes:
+          type: array
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/SyncChange'
+        nextCursor:
+          type: string
+          description: Opaque cursor to persist and send on the next pull.
+        hasMore:
+          type: boolean
+          description: True when more pages exist — keep pulling immediately.
+
+    # ───────── Public tracking ─────────
+    TrackingProjection:
+      type: object
+      description: |
+        The exact FR-3.24 projection — nothing more. Exposed: shop name/city/phone (opt-out
+        respected), Order No, canonical state + display label, money triple, item names,
+        state timestamps, promised date, masked customer ref. Never exposed: customer phone,
+        full name, internal notes, job specs, other orders.
+      required: [orderNo, state, paymentStatus, shop, totalAmount, advancePaid, balanceDue, createdAt, stateTimeline, lastUpdatedAt, poweredByBranding]
+      properties:
+        orderNo:
+          type: string
+          description: Printed format {SHOPCODE}-{NNNN}.
+        state:
+          $ref: '#/components/schemas/OrderState'
+        displayStateLabel:
+          type: [string, 'null']
+          description: Niche label, e.g. "Stitching" for IN_PROGRESS.
+        paymentStatus:
+          $ref: '#/components/schemas/PaymentStatus'
+        shop:
+          type: object
+          required: [name]
+          properties:
+            name:
+              type: string
+            city:
+              type: [string, 'null']
+            phone:
+              type: [string, 'null']
+              description: Null when the merchant opted out of showing their phone.
+            logoUrl:
+              type: [string, 'null']
+              format: uri
+        customerRef:
+          type: [string, 'null']
+          description: Masked customer name — first + last character, middle asterisks ("R****h"). Never the phone.
+        items:
+          type: array
+          description: Item names and quantities only. Omitted entirely for CANCELLED orders.
+          items:
+            type: object
+            required: [name, qty]
+            properties:
+              name:
+                type: string
+              qty:
+                $ref: '#/components/schemas/Qty'
+        totalAmount:
+          $ref: '#/components/schemas/Money'
+        advancePaid:
+          $ref: '#/components/schemas/Money'
+        balanceDue:
+          $ref: '#/components/schemas/Money'
+        createdAt:
+          type: string
+          format: date-time
+        promisedReadyAt:
+          type: [string, 'null']
+          format: date-time
+        stateTimeline:
+          type: array
+          description: State-change timestamps feeding the 4-step progress bar.
+          items:
+            type: object
+            required: [state, occurredAt]
+            properties:
+              state:
+                $ref: '#/components/schemas/OrderState'
+              occurredAt:
+                type: string
+                format: date-time
+        lastUpdatedAt:
+          type: string
+          format: date-time
+          description: Drives the "Last updated X min ago" line.
+        poweredByBranding:
+          type: boolean
+          description: True on Free plan — page shows "Powered by BizBill" footer (Section 8 gating).
+
+    # ───────── Reports ─────────
+    SalesReportDay:
+      type: object
+      required: [date, billCount, grossSales, discountTotal, gstCollected, collected, byMethod]
+      properties:
+        date:
+          type: string
+          format: date
+        billCount:
+          type: integer
+          description: Finalized bills (CANCELLED included per FR-8.3 counting rules; flagged separately in `cancelledCount`).
+        cancelledCount:
+          type: integer
+          default: 0
+        grossSales:
+          $ref: '#/components/schemas/Money'
+        discountTotal:
+          $ref: '#/components/schemas/Money'
+        gstCollected:
+          $ref: '#/components/schemas/Money'
+        collected:
+          allOf: [{ $ref: '#/components/schemas/Money' }]
+          description: Payments received this day (any order date).
+        outstandingDelta:
+          allOf: [{ $ref: '#/components/schemas/Money' }]
+          description: Net change in outstanding balances this day.
+        byMethod:
+          type: object
+          description: Collections split by payment method.
+          properties:
+            CASH:
+              $ref: '#/components/schemas/Money'
+            UPI:
+              $ref: '#/components/schemas/Money'
+            CARD:
+              $ref: '#/components/schemas/Money'
+            OTHER:
+              $ref: '#/components/schemas/Money'
+    SalesReport:
+      type: object
+      required: [from, to, days, totals]
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        days:
+          type: array
+          items:
+            $ref: '#/components/schemas/SalesReportDay'
+        totals:
+          type: object
+          required: [billCount, grossSales, discountTotal, gstCollected, collected, outstanding]
+          properties:
+            billCount:
+              type: integer
+            grossSales:
+              $ref: '#/components/schemas/Money'
+            discountTotal:
+              $ref: '#/components/schemas/Money'
+            gstCollected:
+              $ref: '#/components/schemas/Money'
+            collected:
+              $ref: '#/components/schemas/Money'
+            outstanding:
+              $ref: '#/components/schemas/Money'
+    GstReport:
+      type: object
+      required: [from, to, gstin, invoices, hsnSummary, totals]
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        gstin:
+          type: string
+          description: The tenant's GSTIN the report is filed under.
+        invoices:
+          type: array
+          description: One row per GST invoice (FR-5.13 columns).
+          items:
+            type: object
+            required: [orderNo, invoiceDate, taxableValue, cgst, sgst, invoiceTotal]
+            properties:
+              orderNo:
+                type: string
+              invoiceDate:
+                type: string
+                format: date
+              customerGstin:
+                type: [string, 'null']
+                description: B2B counterparty GSTIN when captured; null for B2C.
+              taxableValue:
+                $ref: '#/components/schemas/Money'
+              cgst:
+                $ref: '#/components/schemas/Money'
+              sgst:
+                $ref: '#/components/schemas/Money'
+              invoiceTotal:
+                $ref: '#/components/schemas/Money'
+        hsnSummary:
+          type: array
+          items:
+            type: object
+            required: [hsnSac, qty, taxableValue, cgst, sgst]
+            properties:
+              hsnSac:
+                type: string
+              description:
+                type: [string, 'null']
+              qty:
+                $ref: '#/components/schemas/Qty'
+              taxableValue:
+                $ref: '#/components/schemas/Money'
+              cgst:
+                $ref: '#/components/schemas/Money'
+              sgst:
+                $ref: '#/components/schemas/Money'
+        totals:
+          type: object
+          required: [taxableValue, cgst, sgst, invoiceTotal]
+          properties:
+            taxableValue:
+              $ref: '#/components/schemas/Money'
+            cgst:
+              $ref: '#/components/schemas/Money'
+            sgst:
+              $ref: '#/components/schemas/Money'
+            invoiceTotal:
+              $ref: '#/components/schemas/Money'
+    OutstandingReport:
+      type: object
+      required: [data, nextCursor, totalOutstanding]
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            required: [kind, amount]
+            properties:
+              kind:
+                type: string
+                enum: [ORDER_BALANCE, KHATA]
+              orderId:
+                type: [string, 'null']
+                format: uuid
+              orderNo:
+                type: [string, 'null']
+              customerId:
+                type: [string, 'null']
+                format: uuid
+              customerName:
+                type: [string, 'null']
+              amount:
+                $ref: '#/components/schemas/Money'
+              since:
+                type: [string, 'null']
+                format: date-time
+        nextCursor:
+          type: [string, 'null']
+        totalOutstanding:
+          $ref: '#/components/schemas/Money'
+
+    # ───────── Subscription ─────────
+    Subscription:
+      type: object
+      required: [planCode, status, currentPeriodEnd, entitlementBlob, entitlements]
+      properties:
+        planCode:
+          $ref: '#/components/schemas/PlanCode'
+        status:
+          $ref: '#/components/schemas/SubscriptionStatus'
+        trialEndsAt:
+          type: [string, 'null']
+          format: date-time
+          description: Non-null only while `trialing` (14-day PRO trial, FR-8.1).
+        currentPeriodEnd:
+          type: string
+          format: date-time
+        billingInterval:
+          type: [string, 'null']
+          enum: [MONTHLY, YEARLY, null]
+          description: Null on FREE.
+        priceInr:
+          type: [integer, 'null']
+          description: Plan price in paise (PRO monthly = 19900, GROWTH monthly = 39900; yearly 199900 / 399900). Null on FREE.
+        graceEndsAt:
+          type: [string, 'null']
+          format: date-time
+          description: Non-null while past_due (7-day grace, dunning running).
+        entitlementBlob:
+          type: string
+          description: Signed JWS (Ed25519) entitlement blob the app caches in Room and verifies against the pinned public key (FR-8.9).
+        entitlements:
+          type: object
+          description: Decoded convenience copy of the blob's limits/features. The blob is authoritative.
+          required: [devices, features]
+          properties:
+            devices:
+              type: integer
+              description: 1 on FREE/PRO; up to 5 on GROWTH.
+            billsPerMonth:
+              type: [integer, 'null']
+              description: 100 on FREE; null = unlimited.
+            reportHistoryDays:
+              type: [integer, 'null']
+              description: 7 on FREE; null = full history.
+            features:
+              type: array
+              items:
+                type: string
+                enum: [PDF_INVOICE, GST_EXPORT, NO_BRANDING, WHATSAPP_NOTIFICATIONS, API_ACCESS, MULTI_DEVICE]
+    CheckoutRequest:
+      type: object
+      required: [planCode, interval]
+      properties:
+        planCode:
+          type: string
+          description: Target paid plan.
+          enum: [PRO, GROWTH]
+        interval:
+          type: string
+          enum: [MONTHLY, YEARLY]
+        couponCode:
+          type: [string, 'null']
+          maxLength: 30
+    CheckoutResponse:
+      type: object
+      required: [checkoutUrl, razorpaySubscriptionId, expiresAt]
+      properties:
+        checkoutUrl:
+          type: string
+          format: uri
+          description: Razorpay-hosted checkout, opened in a Chrome Custom Tab / browser tab.
+        razorpaySubscriptionId:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+          description: Checkout session validity.
+
+    # ───────── Admin ─────────
+    AdminTenantSummary:
+      type: object
+      required: [id, shopName, shopcode, businessType, planCode, subscriptionStatus, status, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        shopName:
+          type: string
+        shopcode:
+          type: string
+        ownerPhone:
+          type: string
+          description: Owner's login phone (admin surface only — never on public/merchant APIs).
+        businessType:
+          type: string
+        planCode:
+          $ref: '#/components/schemas/PlanCode'
+        subscriptionStatus:
+          $ref: '#/components/schemas/SubscriptionStatus'
+        status:
+          type: string
+          enum: [ACTIVE, TRIAL, SUSPENDED, BANNED]
+        billsLast30d:
+          type: integer
+        lastSyncAt:
+          type: [string, 'null']
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    AdminTenantDetail:
+      allOf:
+        - $ref: '#/components/schemas/AdminTenantSummary'
+        - type: object
+          required: [gstin, upiVpa, address, modules, usage, subscriptionHistory]
+          properties:
+            gstin:
+              type: [string, 'null']
+            upiVpa:
+              type: [string, 'null']
+            address:
+              $ref: '#/components/schemas/Address'
+            modules:
+              type: object
+              additionalProperties:
+                type: boolean
+            usage:
+              type: object
+              description: FR-5.16 usage stats.
+              properties:
+                billsPerDay:
+                  type: number
+                  description: 30-day average.
+                activeDevices:
+                  type: integer
+                trackingScans30d:
+                  type: integer
+                storageBytes:
+                  type: integer
+                lastSyncAt:
+                  type: [string, 'null']
+                  format: date-time
+            subscriptionHistory:
+              type: array
+              items:
+                type: object
+                required: [planCode, status, from]
+                properties:
+                  planCode:
+                    $ref: '#/components/schemas/PlanCode'
+                  status:
+                    $ref: '#/components/schemas/SubscriptionStatus'
+                  from:
+                    type: string
+                    format: date-time
+                  to:
+                    type: [string, 'null']
+                    format: date-time
+                  paymentRef:
+                    type: [string, 'null']
+    AdminTenantStatusRequest:
+      type: object
+      required: [status, reason]
+      properties:
+        status:
+          type: string
+          description: BANNED is Owner-role only and disables the tenant's tracking pages (FR-5.24).
+          enum: [ACTIVE, SUSPENDED, BANNED]
+        reason:
+          type: string
+          minLength: 10
+          maxLength: 500
+    AdminSubscriptionOverrideRequest:
+      type: object
+      required: [action, reason]
+      properties:
+        action:
+          type: string
+          enum: [EXTEND, COMP, PLAN_OVERRIDE, RECORD_REFUND, FORCE_ENTITLEMENT_REFRESH]
+        planCode:
+          oneOf:
+            - $ref: '#/components/schemas/PlanCode'
+            - type: 'null'
+          description: Required for COMP and PLAN_OVERRIDE.
+        days:
+          type: [integer, 'null']
+          minimum: 1
+          maximum: 366
+          description: Required for EXTEND and COMP.
+        refundAmount:
+          type: [integer, 'null']
+          description: Paise; required for RECORD_REFUND. Money movement happens in the provider console (MVP).
+        reason:
+          type: string
+          minLength: 10
+          maxLength: 500
+          description: Mandatory; written to the audit log.
+    AdminImpersonateRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 10
+          maxLength: 500
+    AdminImpersonateResponse:
+      type: object
+      required: [impersonationToken, tenantId, readOnly, expiresAt, auditSessionId]
+      properties:
+        impersonationToken:
+          type: string
+          description: Read-only scoped JWT; writes return 403 IMPERSONATION_READ_ONLY.
+        tenantId:
+          type: string
+          format: uuid
+        readOnly:
+          type: boolean
+          const: true
+        expiresAt:
+          type: string
+          format: date-time
+          description: 30 minutes from issue; not refreshable.
+        auditSessionId:
+          type: string
+          format: uuid
+    AdminMetrics:
+      type: object
+      required: [month, revenue, platform, trends]
+      properties:
+        month:
+          type: string
+          pattern: '^[0-9]{4}-[0-9]{2}$'
+        revenue:
+          type: object
+          description: FR-5.17 / FR-8.14 revenue block. All money in paise.
+          required: [mrr, planMix, trialToPaidRate]
+          properties:
+            mrr:
+              $ref: '#/components/schemas/Money'
+            mrrMovement:
+              type: object
+              properties:
+                new:
+                  $ref: '#/components/schemas/Money'
+                expansion:
+                  $ref: '#/components/schemas/Money'
+                contraction:
+                  $ref: '#/components/schemas/Money'
+                churn:
+                  $ref: '#/components/schemas/Money'
+            arpu:
+              $ref: '#/components/schemas/Money'
+            planMix:
+              type: object
+              properties:
+                FREE:
+                  type: integer
+                PRO:
+                  type: integer
+                GROWTH:
+                  type: integer
+            newSubscriptions:
+              type: integer
+            churnedSubscriptions:
+              type: integer
+            trialToPaidRate:
+              type: number
+              description: Fraction 0..1 (target ≥ 0.08 by month 6).
+            failedRenewals:
+              type: integer
+            dunningRecoveryRate:
+              type: number
+            churnByBusinessType:
+              type: object
+              additionalProperties:
+                type: number
+        platform:
+          type: object
+          description: FR-5.18 platform block (current-day values).
+          properties:
+            dauMerchants:
+              type: integer
+            billsPerDay:
+              type: integer
+            trackingScansPerDay:
+              type: integer
+            syncFailureRate:
+              type: number
+              description: Fraction of rejected sync ops (alert threshold 0.02).
+            apiErrorRate:
+              type: number
+        trends:
+          type: array
+          description: 90-day daily series for the trend charts.
+          items:
+            type: object
+            required: [date]
+            properties:
+              date:
+                type: string
+                format: date
+              dauMerchants:
+                type: integer
+              billsCreated:
+                type: integer
+              trackingScans:
+                type: integer
+              syncFailureRate:
+                type: number
+              apiErrorRate:
+                type: number

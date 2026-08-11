@@ -1,0 +1,257 @@
+{
+  "@@locale": "en",
+  "appName": "Brand Training",
+  "continue": "Continue",
+  "cancel": "Cancel",
+  "submit": "Submit",
+  "save": "Save",
+  "retry": "Retry",
+  "close": "Close",
+  "loading": "Loading…",
+  "error_generic": "Something went wrong. Please try again.",
+  "error_no_internet": "No internet connection",
+  "offline_banner": "You are offline — changes will sync when reconnected",
+
+  "lang_english": "English",
+  "lang_hindi": "हिंदी",
+  "choose_language": "Choose Language",
+
+  "login_title": "Welcome Back",
+  "login_subtitle": "Enter your registered mobile number",
+  "phone_hint": "10-digit mobile number",
+  "phone_invalid": "Enter a valid 10-digit number",
+  "get_otp": "Get OTP",
+  "otp_hint": "6-digit OTP",
+  "otp_invalid": "Enter the 6-digit OTP",
+  "verify_otp": "Verify OTP",
+  "otp_sent_to": "OTP sent to +91 {phone}",
+  "@otp_sent_to": {
+    "placeholders": {
+      "phone": {"type": "String"}
+    }
+  },
+  "otp_whatsapp": "Receive OTP on WhatsApp instead",
+  "biometric_prompt": "Use biometric / PIN to continue",
+  "biometric_unlock": "Unlock with Biometric",
+
+  "link_identity_title": "Join Your Center",
+  "link_identity_subtitle": "Enter the center code given by your institute",
+  "center_code_hint": "Center code",
+  "scan_qr": "Scan QR Code",
+  "link_center": "Link Center",
+  "auto_linking": "Linking your account…",
+
+  "consent_title": "Privacy Notice",
+  "consent_subtitle": "Please read carefully before proceeding",
+  "consent_agree": "I Agree & Continue",
+  "consent_scroll_to_enable": "Scroll to the bottom to enable",
+  "guardian_name_hint": "Guardian full name",
+  "guardian_phone_hint": "Guardian mobile number",
+  "send_consent_request": "Send Consent Request to Guardian",
+  "consent_waiting": "Waiting for guardian approval…",
+  "resend": "Resend",
+  "resend_in": "Resend in {seconds}s",
+  "@resend_in": {
+    "placeholders": {
+      "seconds": {"type": "int"}
+    }
+  },
+
+  "home_greeting": "Hello, {name}!",
+  "@home_greeting": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "home_center": "Center: {center}",
+  "@home_center": {
+    "placeholders": {
+      "center": {"type": "String"}
+    }
+  },
+  "home_todays_classes": "Today's Classes",
+  "home_next_exam": "Next Exam",
+  "home_streak": "{days} day streak 🔥",
+  "@home_streak": {
+    "placeholders": {
+      "days": {"type": "int"}
+    }
+  },
+  "home_announcements": "Announcements",
+  "home_materials": "Materials",
+  "home_exams": "Exams",
+  "home_certificates": "Certificates",
+
+  "fee_due_title": "Fee Due",
+  "fee_pay_now": "Pay Now",
+  "fee_overdue": "Overdue",
+  "fee_upcoming": "Upcoming",
+  "fee_paid": "Paid",
+  "fees_title": "Fees",
+  "installment": "Installment",
+  "due_on": "Due {date}",
+  "@due_on": {
+    "placeholders": {
+      "date": {"type": "String"}
+    }
+  },
+  "paid_on": "Paid {date}",
+  "@paid_on": {
+    "placeholders": {
+      "date": {"type": "String"}
+    }
+  },
+  "payment_upi": "Pay via UPI App",
+  "payment_qr": "Show QR",
+  "payment_gateway": "Pay Online",
+  "download_receipt": "Download Receipt",
+
+  "courses_title": "My Courses",
+  "progress_units": "{completed}/{total} units",
+  "@progress_units": {
+    "placeholders": {
+      "completed": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+
+  "exams_title": "Exams",
+  "exam_upcoming": "Upcoming",
+  "exam_active": "Active",
+  "exam_completed": "Completed",
+  "exam_result_pending": "Result Pending",
+  "start_exam": "Start Exam",
+  "view_result": "View Result",
+  "exam_duration": "{minutes} minutes",
+  "@exam_duration": {
+    "placeholders": {
+      "minutes": {"type": "int"}
+    }
+  },
+  "exam_total_marks": "{marks} marks",
+  "@exam_total_marks": {
+    "placeholders": {
+      "marks": {"type": "int"}
+    }
+  },
+
+  "exam_instructions": "Instructions",
+  "exam_start": "Start Exam",
+  "exam_time_remaining": "Time Left",
+  "exam_question_of": "Question {current} of {total}",
+  "@exam_question_of": {
+    "placeholders": {
+      "current": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "exam_mark_review": "Mark for Review",
+  "exam_unmark_review": "Unmark Review",
+  "exam_prev": "Previous",
+  "exam_next": "Next",
+  "exam_submit": "Submit Exam",
+  "exam_submit_confirm": "Are you sure you want to submit? You have {unanswered} unanswered questions.",
+  "@exam_submit_confirm": {
+    "placeholders": {
+      "unanswered": {"type": "int"}
+    }
+  },
+  "exam_auto_submit": "Time up! Submitting exam…",
+  "exam_tab_switch_warning": "Leaving the exam window may be flagged",
+  "exam_answered": "Answered",
+  "exam_skipped": "Skipped",
+  "exam_marked_review": "Marked for Review",
+  "exam_palette": "Question Palette",
+
+  "result_score": "{obtained}/{total}",
+  "@result_score": {
+    "placeholders": {
+      "obtained": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "result_passed": "Passed!",
+  "result_failed": "Better luck next time",
+  "result_pending": "Result will be declared soon",
+  "result_percentage": "{percent}%",
+  "@result_percentage": {
+    "placeholders": {
+      "percent": {"type": "String"}
+    }
+  },
+  "result_rank": "Rank #{rank} in batch",
+  "@result_rank": {
+    "placeholders": {
+      "rank": {"type": "int"}
+    }
+  },
+
+  "certificates_title": "Certificates",
+  "cert_issued": "Issued {date}",
+  "@cert_issued": {
+    "placeholders": {
+      "date": {"type": "String"}
+    }
+  },
+  "cert_download": "Download PDF",
+  "cert_share": "Share",
+  "cert_verify": "Verify",
+
+  "notifications_title": "Notifications",
+  "notifications_empty": "No notifications yet",
+
+  "profile_title": "Profile",
+  "profile_language": "App Language",
+  "profile_biometric": "Biometric Unlock",
+  "profile_logout": "Logout",
+  "profile_version": "Version {version}",
+  "@profile_version": {
+    "placeholders": {
+      "version": {"type": "String"}
+    }
+  },
+
+  "teacher_today_title": "Today",
+  "teacher_batch": "Batch",
+  "teacher_schedule": "Schedule",
+  "teacher_attendance_title": "Attendance",
+  "teacher_attendance_mark_all": "Mark All Present",
+  "teacher_attendance_scan": "Scan Mode",
+  "teacher_attendance_submit": "Submit Attendance",
+  "teacher_attendance_submitted": "Attendance recorded. {absent} student(s) absent — notifying guardians…",
+  "@teacher_attendance_submitted": {
+    "placeholders": {
+      "absent": {"type": "int"}
+    }
+  },
+  "teacher_present": "P",
+  "teacher_absent": "A",
+  "teacher_marks_title": "Marks Entry",
+  "teacher_theory": "Theory",
+  "teacher_practical": "Practical",
+  "teacher_viva": "Viva",
+  "teacher_bulk_paste": "Bulk Paste",
+  "teacher_marks_submit": "Submit Marks",
+  "teacher_moderation_pending": "Submitted — moderation pending",
+  "teacher_announcements_title": "Announcements",
+  "teacher_post_announcement": "Post Announcement",
+  "announcement_title_hint": "Title",
+  "announcement_body_hint": "Message",
+  "announcement_audience": "Audience",
+
+  "nav_home": "Home",
+  "nav_courses": "Courses",
+  "nav_exams": "Exams",
+  "nav_fees": "Fees",
+  "nav_profile": "Profile",
+  "nav_today": "Today",
+  "nav_attendance": "Attendance",
+  "nav_marks": "Marks",
+  "nav_announcements": "Announcements",
+
+  "empty_state_default": "Nothing here yet",
+  "empty_state_courses": "No courses enrolled",
+  "empty_state_exams": "No exams scheduled",
+  "empty_state_fees": "All fees up to date!",
+  "empty_state_certificates": "No certificates yet"
+}

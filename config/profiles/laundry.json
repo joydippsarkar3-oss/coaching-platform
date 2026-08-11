@@ -1,0 +1,65 @@
+{
+  "$schema": "../profile.schema.json",
+  "id": "laundry",
+  "display_name": "Laundry / Dry-Clean",
+  "version": 1,
+  "modules": ["CUSTOM_ORDER", "CATALOG"],
+  "default_landing": "home",
+  "state_labels": {
+    "CREATED": "Received",
+    "IN_PROGRESS": "Washing–Processing",
+    "READY": "Ready for Pickup",
+    "COMPLETED": "Delivered",
+    "CANCELLED": "Cancelled"
+  },
+  "in_progress_sub_labels": ["Washing", "Processing"],
+  "field_packs": [
+    {
+      "key": "service_type",
+      "label": "Service Type",
+      "type": "select",
+      "required": true,
+      "options": ["Wash", "Dry-Clean", "Iron"],
+      "show_on_customer_copy": true,
+      "show_on_shop_copy": true
+    },
+    {
+      "key": "special_care_notes",
+      "label": "Special-Care Notes",
+      "type": "text",
+      "required": false,
+      "show_on_customer_copy": false,
+      "show_on_shop_copy": true
+    }
+  ],
+  "home_quick_actions": [
+    { "id": "new_order", "label": "New Order", "screen": "new_custom_order" },
+    { "id": "scan_qr", "label": "Scan QR", "screen": "scan_qr" },
+    { "id": "orders_board", "label": "Orders Board", "screen": "orders_board" },
+    { "id": "reports", "label": "Reports", "screen": "reports" }
+  ],
+  "receipt_template": "rcpt-custom-order-v1",
+  "catalog_field_hints": {
+    "unit_types": ["piece"],
+    "allow_decimal_qty": false,
+    "variants_enabled": false,
+    "addons_enabled": false,
+    "batch_tracking": false,
+    "barcode_scan": false,
+    "default_gst_rates": [18],
+    "item_noun": "Garment"
+  },
+  "sample_catalog": [
+    { "name": "Shirt (Wash & Iron)", "price": 25, "gst_rate": 18, "unit": "piece" },
+    { "name": "Trousers (Wash & Iron)", "price": 30, "gst_rate": 18, "unit": "piece" },
+    { "name": "Kurta (Wash & Iron)", "price": 30, "gst_rate": 18, "unit": "piece" },
+    { "name": "Saree (Dry-Clean)", "price": 150, "gst_rate": 18, "unit": "piece" },
+    { "name": "Suit 2-pc (Dry-Clean)", "price": 250, "gst_rate": 18, "unit": "piece" },
+    { "name": "Blanket (Wash)", "price": 180, "gst_rate": 18, "unit": "piece" },
+    { "name": "Bedsheet (Wash & Iron)", "price": 60, "gst_rate": 18, "unit": "piece" },
+    { "name": "Iron Only (per piece)", "price": 10, "gst_rate": 18, "unit": "piece" }
+  ],
+  "behavior_flags": {
+    "auto_tag_numbers": true
+  }
+}

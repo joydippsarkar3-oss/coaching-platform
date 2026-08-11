@@ -1,0 +1,114 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "enquiries": "Enquiries",
+    "admissions": "Admissions",
+    "students": "Students",
+    "batches": "Batches",
+    "attendance": "Attendance",
+    "fees": "Fees",
+    "exams": "Exams",
+    "certificates": "Certificates",
+    "staff": "Staff",
+    "wallet": "Wallet & Promos",
+    "marketing": "Marketing Studio",
+    "expenses": "Expenses & Inventory",
+    "microsite": "Microsite",
+    "reports": "Reports",
+    "settings": "Settings"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "add": "Add",
+    "search": "Search",
+    "filter": "Filter",
+    "export": "Export CSV",
+    "loading": "Loading...",
+    "confirm": "Confirm",
+    "close": "Close",
+    "submit": "Submit",
+    "back": "Back",
+    "next": "Next",
+    "finish": "Finish",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "auth": {
+    "login": "Login",
+    "phone": "Mobile Number",
+    "otp": "OTP",
+    "sendOtp": "Send OTP",
+    "verifyOtp": "Verify OTP",
+    "logout": "Logout",
+    "phonePlaceholder": "Enter 10-digit mobile number",
+    "otpPlaceholder": "Enter 6-digit OTP",
+    "loginTitle": "Center Admin Login"
+  },
+  "dashboard": {
+    "todayCollections": "Today's Collections",
+    "newAdmissions": "New Admissions Today",
+    "enquiriesOverdue": "Enquiries Overdue",
+    "attendancePercent": "Attendance %",
+    "actionFeed": "Action Required",
+    "admissionsTitle": "Admissions",
+    "revenueTitle": "Revenue"
+  },
+  "enquiries": {
+    "title": "Enquiries",
+    "addNew": "Add Enquiry",
+    "name": "Name",
+    "phone": "Phone",
+    "course": "Course Interest",
+    "source": "Source",
+    "stage": "Stage",
+    "followUpDate": "Follow-up Date",
+    "notes": "Notes",
+    "duplicateWarning": "This phone number already exists in enquiries.",
+    "stages": {
+      "new": "New",
+      "contacted": "Contacted",
+      "visited": "Visited",
+      "admitted": "Admitted",
+      "lost": "Lost"
+    },
+    "sources": {
+      "walk_in": "Walk-in",
+      "referral": "Referral",
+      "social_media": "Social Media",
+      "website": "Website",
+      "other": "Other"
+    }
+  },
+  "admissions": {
+    "title": "New Admission",
+    "steps": {
+      "findStudent": "Find Student",
+      "studentDetails": "Student Details",
+      "consent": "Consent",
+      "courseSelection": "Course & Batch",
+      "payment": "Payment"
+    }
+  },
+  "fees": {
+    "title": "Fees",
+    "collect": "Collect Payment",
+    "dueDate": "Due Date",
+    "amount": "Amount",
+    "lateFee": "Late Fee",
+    "status": "Status",
+    "aging": "Dues Aging",
+    "bucket0to7": "0-7 Days",
+    "bucket8to30": "8-30 Days",
+    "bucket31plus": "31+ Days"
+  },
+  "onboarding": {
+    "title": "Setup Checklist",
+    "profile": "Center profile complete",
+    "courses": "Courses added",
+    "feePlans": "Fee plans added",
+    "firstAdmission": "First admission done"
+  }
+}

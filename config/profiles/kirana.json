@@ -1,0 +1,49 @@
+{
+  "$schema": "../profile.schema.json",
+  "id": "kirana",
+  "display_name": "Kirana / Grocery",
+  "version": 1,
+  "modules": ["QUICK_SALE", "CATALOG", "INVENTORY", "CREDIT_LEDGER"],
+  "default_landing": "quick_sale",
+  "state_labels": {
+    "CREATED": "Order Received",
+    "IN_PROGRESS": "Packing",
+    "READY": "Ready",
+    "COMPLETED": "Delivered",
+    "CANCELLED": "Cancelled"
+  },
+  "field_packs": [],
+  "home_quick_actions": [
+    { "id": "new_bill", "label": "New Bill", "screen": "quick_sale" },
+    { "id": "khata", "label": "Khata", "screen": "khata" },
+    { "id": "inventory", "label": "Inventory", "screen": "inventory" },
+    { "id": "reports", "label": "Reports", "screen": "reports" }
+  ],
+  "receipt_template": "rcpt-quick-sale-v1",
+  "catalog_field_hints": {
+    "unit_types": ["piece", "kg", "g", "L", "ml", "dozen", "pack"],
+    "allow_decimal_qty": true,
+    "variants_enabled": false,
+    "addons_enabled": false,
+    "batch_tracking": false,
+    "barcode_scan": true,
+    "default_gst_rates": [0, 5, 12, 18, 28],
+    "item_noun": "Item"
+  },
+  "sample_catalog": [
+    { "name": "Basmati Rice (loose)", "price": 90, "gst_rate": 5, "unit": "kg" },
+    { "name": "Toor Dal (loose)", "price": 140, "gst_rate": 5, "unit": "kg" },
+    { "name": "Sugar (loose)", "price": 44, "gst_rate": 5, "unit": "kg" },
+    { "name": "Atta (loose, unbranded)", "price": 38, "gst_rate": 0, "unit": "kg" },
+    { "name": "Milk 500 ml Pack", "price": 27, "gst_rate": 0, "unit": "piece" },
+    { "name": "Eggs", "price": 84, "gst_rate": 0, "unit": "dozen" },
+    { "name": "Parle-G Biscuit", "price": 10, "gst_rate": 18, "unit": "piece" },
+    { "name": "Cooking Oil 1 L", "price": 130, "gst_rate": 5, "unit": "piece" },
+    { "name": "Detergent Powder 1 kg", "price": 110, "gst_rate": 18, "unit": "piece" },
+    { "name": "Salt 1 kg", "price": 28, "gst_rate": 0, "unit": "piece" }
+  ],
+  "behavior_flags": {
+    "quick_sale_tracking_qr_default": false,
+    "quick_sale_instant_complete": true
+  }
+}

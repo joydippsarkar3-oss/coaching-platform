@@ -1,0 +1,19 @@
+# ─────────────────────────────────────────────────────────────────
+# key.properties.example
+#
+# Copy this file to  android/key.properties  and fill in the values.
+# Never commit key.properties to git — it is in .gitignore already.
+#
+# To generate a new keystore:
+#   keytool -genkey -v \
+#     -keystore computrain.jks \
+#     -alias computrain \
+#     -keyalg RSA \
+#     -keysize 2048 \
+#     -validity 10000
+# ─────────────────────────────────────────────────────────────────
+
+storeFile=../computrain.jks
+storePassword=REPLACE_WITH_KEYSTORE_PASSWORD
+keyAlias=computrain
+keyPassword=REPLACE_WITH_KEY_PASSWORD

@@ -1,0 +1,100 @@
+{
+  "$schema": "../profile.schema.json",
+  "id": "printing",
+  "display_name": "Printing & Custom Jobs",
+  "version": 1,
+  "modules": ["CUSTOM_ORDER", "QUICK_SALE", "CATALOG"],
+  "default_landing": "home",
+  "state_labels": {
+    "CREATED": "Order Received",
+    "IN_PROGRESS": "Printing",
+    "READY": "Ready for Pickup",
+    "COMPLETED": "Delivered",
+    "CANCELLED": "Cancelled"
+  },
+  "field_packs": [
+    {
+      "key": "print_size",
+      "label": "Print Size",
+      "type": "select",
+      "required": true,
+      "options": ["A4", "A3", "12x18", "Banner (ft)", "Custom"],
+      "show_on_customer_copy": false,
+      "show_on_shop_copy": true
+    },
+    {
+      "key": "media_material",
+      "label": "Media / Material",
+      "type": "select",
+      "required": true,
+      "options": [
+        "Art Paper",
+        "Photo Paper",
+        "Sticker",
+        "Vinyl",
+        "Flex",
+        "Canvas",
+        "T-Shirt",
+        "Mug"
+      ],
+      "show_on_customer_copy": false,
+      "show_on_shop_copy": true
+    },
+    {
+      "key": "finishing",
+      "label": "Finishing",
+      "type": "multiselect",
+      "required": false,
+      "options": ["Lamination", "Mounting", "Binding", "Cutting"],
+      "show_on_customer_copy": false,
+      "show_on_shop_copy": true
+    },
+    {
+      "key": "quantity",
+      "label": "Quantity",
+      "type": "number",
+      "required": true,
+      "show_on_customer_copy": false,
+      "show_on_shop_copy": true
+    },
+    {
+      "key": "reference_photo",
+      "label": "Reference Photo",
+      "type": "photo",
+      "required": false,
+      "show_on_customer_copy": false,
+      "show_on_shop_copy": false
+    }
+  ],
+  "home_quick_actions": [
+    { "id": "new_job_order", "label": "New Job Order", "screen": "new_custom_order" },
+    { "id": "quick_sale", "label": "Quick Sale", "screen": "quick_sale" },
+    { "id": "scan_qr", "label": "Scan QR", "screen": "scan_qr" },
+    { "id": "orders_board", "label": "Orders Board", "screen": "orders_board" }
+  ],
+  "receipt_template": "rcpt-custom-order-v1",
+  "catalog_field_hints": {
+    "unit_types": ["piece", "sqft", "set", "service"],
+    "allow_decimal_qty": true,
+    "variants_enabled": false,
+    "addons_enabled": false,
+    "batch_tracking": false,
+    "barcode_scan": false,
+    "default_gst_rates": [5, 12, 18],
+    "item_noun": "Item"
+  },
+  "sample_catalog": [
+    { "name": "Visiting Cards (per card)", "price": 0.9, "gst_rate": 18, "unit": "piece" },
+    { "name": "Flex Banner (per sqft)", "price": 30, "gst_rate": 18, "unit": "sqft" },
+    { "name": "A4 Colour Print", "price": 10, "gst_rate": 12, "unit": "piece" },
+    { "name": "A3 Poster (Art Paper)", "price": 60, "gst_rate": 12, "unit": "piece" },
+    { "name": "Lamination (A4)", "price": 15, "gst_rate": 18, "unit": "piece" },
+    { "name": "T-Shirt Print", "price": 250, "gst_rate": 5, "unit": "piece" },
+    { "name": "Mug Print", "price": 180, "gst_rate": 12, "unit": "piece" },
+    { "name": "Design Charges", "price": 200, "gst_rate": 18, "unit": "service" }
+  ],
+  "behavior_flags": {
+    "quick_sale_tracking_qr_default": true,
+    "quick_sale_instant_complete": true
+  }
+}

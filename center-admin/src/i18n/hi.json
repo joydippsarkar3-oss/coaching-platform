@@ -1,0 +1,114 @@
+{
+  "nav": {
+    "dashboard": "डैशबोर्ड",
+    "enquiries": "पूछताछ",
+    "admissions": "प्रवेश",
+    "students": "छात्र",
+    "batches": "बैच",
+    "attendance": "उपस्थिति",
+    "fees": "फीस",
+    "exams": "परीक्षा",
+    "certificates": "प्रमाण पत्र",
+    "staff": "स्टाफ",
+    "wallet": "वॉलेट और प्रोमो",
+    "marketing": "मार्केटिंग स्टूडियो",
+    "expenses": "खर्च और इन्वेंटरी",
+    "microsite": "माइक्रोसाइट",
+    "reports": "रिपोर्ट",
+    "settings": "सेटिंग्स"
+  },
+  "common": {
+    "save": "सहेजें",
+    "cancel": "रद्द करें",
+    "delete": "हटाएं",
+    "edit": "संपादित करें",
+    "add": "जोड़ें",
+    "search": "खोजें",
+    "filter": "फिल्टर",
+    "export": "CSV निर्यात",
+    "loading": "लोड हो रहा है...",
+    "confirm": "पुष्टि करें",
+    "close": "बंद करें",
+    "submit": "जमा करें",
+    "back": "वापस",
+    "next": "अगला",
+    "finish": "समाप्त करें",
+    "yes": "हाँ",
+    "no": "नहीं"
+  },
+  "auth": {
+    "login": "लॉगिन",
+    "phone": "मोबाइल नंबर",
+    "otp": "OTP",
+    "sendOtp": "OTP भेजें",
+    "verifyOtp": "OTP सत्यापित करें",
+    "logout": "लॉगआउट",
+    "phonePlaceholder": "10 अंकों का मोबाइल नंबर दर्ज करें",
+    "otpPlaceholder": "6 अंकों का OTP दर्ज करें",
+    "loginTitle": "सेंटर एडमिन लॉगिन"
+  },
+  "dashboard": {
+    "todayCollections": "आज का संग्रह",
+    "newAdmissions": "आज के नए प्रवेश",
+    "enquiriesOverdue": "अतिदेय पूछताछ",
+    "attendancePercent": "उपस्थिति %",
+    "actionFeed": "कार्रवाई आवश्यक",
+    "admissionsTitle": "प्रवेश",
+    "revenueTitle": "राजस्व"
+  },
+  "enquiries": {
+    "title": "पूछताछ",
+    "addNew": "पूछताछ जोड़ें",
+    "name": "नाम",
+    "phone": "फोन",
+    "course": "कोर्स रुचि",
+    "source": "स्रोत",
+    "stage": "स्तर",
+    "followUpDate": "फॉलो-अप दिनांक",
+    "notes": "नोट्स",
+    "duplicateWarning": "यह फोन नंबर पहले से पूछताछ में मौजूद है।",
+    "stages": {
+      "new": "नया",
+      "contacted": "संपर्क किया",
+      "visited": "विजिट किया",
+      "admitted": "प्रवेश लिया",
+      "lost": "खो गया"
+    },
+    "sources": {
+      "walk_in": "सीधे आया",
+      "referral": "रेफरल",
+      "social_media": "सोशल मीडिया",
+      "website": "वेबसाइट",
+      "other": "अन्य"
+    }
+  },
+  "admissions": {
+    "title": "नया प्रवेश",
+    "steps": {
+      "findStudent": "छात्र खोजें",
+      "studentDetails": "छात्र विवरण",
+      "consent": "सहमति",
+      "courseSelection": "कोर्स और बैच",
+      "payment": "भुगतान"
+    }
+  },
+  "fees": {
+    "title": "फीस",
+    "collect": "भुगतान एकत्र करें",
+    "dueDate": "देय दिनांक",
+    "amount": "राशि",
+    "lateFee": "विलंब शुल्क",
+    "status": "स्थिति",
+    "aging": "बकाया एजिंग",
+    "bucket0to7": "0-7 दिन",
+    "bucket8to30": "8-30 दिन",
+    "bucket31plus": "31+ दिन"
+  },
+  "onboarding": {
+    "title": "सेटअप चेकलिस्ट",
+    "profile": "सेंटर प्रोफाइल पूर्ण",
+    "courses": "कोर्स जोड़े गए",
+    "feePlans": "फीस प्लान जोड़े गए",
+    "firstAdmission": "पहला प्रवेश हो गया"
+  }
+}

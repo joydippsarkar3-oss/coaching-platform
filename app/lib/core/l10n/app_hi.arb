@@ -1,0 +1,257 @@
+{
+  "@@locale": "hi",
+  "appName": "Brand Training",
+  "continue": "जारी रखें",
+  "cancel": "रद्द करें",
+  "submit": "जमा करें",
+  "save": "सहेजें",
+  "retry": "पुनः प्रयास",
+  "close": "बंद करें",
+  "loading": "लोड हो रहा है…",
+  "error_generic": "कुछ गलत हुआ। कृपया पुनः प्रयास करें।",
+  "error_no_internet": "इंटरनेट कनेक्शन नहीं है",
+  "offline_banner": "आप ऑफलाइन हैं — पुनः कनेक्ट होने पर परिवर्तन सिंक होंगे",
+
+  "lang_english": "English",
+  "lang_hindi": "हिंदी",
+  "choose_language": "भाषा चुनें",
+
+  "login_title": "वापसी पर स्वागत है",
+  "login_subtitle": "अपना पंजीकृत मोबाइल नंबर दर्ज करें",
+  "phone_hint": "10 अंकों का मोबाइल नंबर",
+  "phone_invalid": "कृपया सही 10 अंकों का नंबर दर्ज करें",
+  "get_otp": "OTP प्राप्त करें",
+  "otp_hint": "6 अंकों का OTP",
+  "otp_invalid": "6 अंकों का OTP दर्ज करें",
+  "verify_otp": "OTP सत्यापित करें",
+  "otp_sent_to": "+91 {phone} पर OTP भेजा गया",
+  "@otp_sent_to": {
+    "placeholders": {
+      "phone": {"type": "String"}
+    }
+  },
+  "otp_whatsapp": "WhatsApp पर OTP प्राप्त करें",
+  "biometric_prompt": "जारी रखने के लिए बायोमेट्रिक / PIN का उपयोग करें",
+  "biometric_unlock": "बायोमेट्रिक से अनलॉक करें",
+
+  "link_identity_title": "अपने केंद्र से जुड़ें",
+  "link_identity_subtitle": "अपने संस्थान द्वारा दिया गया केंद्र कोड दर्ज करें",
+  "center_code_hint": "केंद्र कोड",
+  "scan_qr": "QR कोड स्कैन करें",
+  "link_center": "केंद्र से लिंक करें",
+  "auto_linking": "आपका खाता लिंक किया जा रहा है…",
+
+  "consent_title": "गोपनीयता सूचना",
+  "consent_subtitle": "आगे बढ़ने से पहले कृपया ध्यान से पढ़ें",
+  "consent_agree": "मैं सहमत हूँ और जारी रखूँगा",
+  "consent_scroll_to_enable": "सक्षम करने के लिए नीचे तक स्क्रॉल करें",
+  "guardian_name_hint": "अभिभावक का पूरा नाम",
+  "guardian_phone_hint": "अभिभावक का मोबाइल नंबर",
+  "send_consent_request": "अभिभावक को सहमति अनुरोध भेजें",
+  "consent_waiting": "अभिभावक की स्वीकृति की प्रतीक्षा है…",
+  "resend": "पुनः भेजें",
+  "resend_in": "{seconds} सेकंड में पुनः भेजें",
+  "@resend_in": {
+    "placeholders": {
+      "seconds": {"type": "int"}
+    }
+  },
+
+  "home_greeting": "नमस्ते, {name}!",
+  "@home_greeting": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "home_center": "केंद्र: {center}",
+  "@home_center": {
+    "placeholders": {
+      "center": {"type": "String"}
+    }
+  },
+  "home_todays_classes": "आज की कक्षाएँ",
+  "home_next_exam": "अगली परीक्षा",
+  "home_streak": "{days} दिन की स्ट्रीक 🔥",
+  "@home_streak": {
+    "placeholders": {
+      "days": {"type": "int"}
+    }
+  },
+  "home_announcements": "घोषणाएँ",
+  "home_materials": "सामग्री",
+  "home_exams": "परीक्षाएँ",
+  "home_certificates": "प्रमाण पत्र",
+
+  "fee_due_title": "बकाया शुल्क",
+  "fee_pay_now": "अभी भुगतान करें",
+  "fee_overdue": "अतिदेय",
+  "fee_upcoming": "आगामी",
+  "fee_paid": "भुगतान हो गया",
+  "fees_title": "शुल्क",
+  "installment": "किस्त",
+  "due_on": "देय तिथि: {date}",
+  "@due_on": {
+    "placeholders": {
+      "date": {"type": "String"}
+    }
+  },
+  "paid_on": "भुगतान: {date}",
+  "@paid_on": {
+    "placeholders": {
+      "date": {"type": "String"}
+    }
+  },
+  "payment_upi": "UPI ऐप से भुगतान करें",
+  "payment_qr": "QR दिखाएँ",
+  "payment_gateway": "ऑनलाइन भुगतान",
+  "download_receipt": "रसीद डाउनलोड करें",
+
+  "courses_title": "मेरे कोर्स",
+  "progress_units": "{completed}/{total} इकाइयाँ",
+  "@progress_units": {
+    "placeholders": {
+      "completed": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+
+  "exams_title": "परीक्षाएँ",
+  "exam_upcoming": "आगामी",
+  "exam_active": "सक्रिय",
+  "exam_completed": "पूर्ण",
+  "exam_result_pending": "परिणाम प्रतीक्षित",
+  "start_exam": "परीक्षा शुरू करें",
+  "view_result": "परिणाम देखें",
+  "exam_duration": "{minutes} मिनट",
+  "@exam_duration": {
+    "placeholders": {
+      "minutes": {"type": "int"}
+    }
+  },
+  "exam_total_marks": "{marks} अंक",
+  "@exam_total_marks": {
+    "placeholders": {
+      "marks": {"type": "int"}
+    }
+  },
+
+  "exam_instructions": "निर्देश",
+  "exam_start": "परीक्षा शुरू करें",
+  "exam_time_remaining": "शेष समय",
+  "exam_question_of": "प्रश्न {current} / {total}",
+  "@exam_question_of": {
+    "placeholders": {
+      "current": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "exam_mark_review": "समीक्षा के लिए चिह्नित करें",
+  "exam_unmark_review": "समीक्षा हटाएँ",
+  "exam_prev": "पिछला",
+  "exam_next": "अगला",
+  "exam_submit": "परीक्षा जमा करें",
+  "exam_submit_confirm": "क्या आप सुनिश्चित हैं? {unanswered} प्रश्न अनुत्तरित हैं।",
+  "@exam_submit_confirm": {
+    "placeholders": {
+      "unanswered": {"type": "int"}
+    }
+  },
+  "exam_auto_submit": "समय समाप्त! परीक्षा जमा की जा रही है…",
+  "exam_tab_switch_warning": "परीक्षा विंडो छोड़ना दर्ज किया जा सकता है",
+  "exam_answered": "उत्तरित",
+  "exam_skipped": "छोड़ा गया",
+  "exam_marked_review": "समीक्षा के लिए चिह्नित",
+  "exam_palette": "प्रश्न पैलेट",
+
+  "result_score": "{obtained}/{total}",
+  "@result_score": {
+    "placeholders": {
+      "obtained": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "result_passed": "उत्तीर्ण!",
+  "result_failed": "अगली बार बेहतर प्रयास करें",
+  "result_pending": "परिणाम शीघ्र घोषित होगा",
+  "result_percentage": "{percent}%",
+  "@result_percentage": {
+    "placeholders": {
+      "percent": {"type": "String"}
+    }
+  },
+  "result_rank": "बैच में रैंक #{rank}",
+  "@result_rank": {
+    "placeholders": {
+      "rank": {"type": "int"}
+    }
+  },
+
+  "certificates_title": "प्रमाण पत्र",
+  "cert_issued": "जारी: {date}",
+  "@cert_issued": {
+    "placeholders": {
+      "date": {"type": "String"}
+    }
+  },
+  "cert_download": "PDF डाउनलोड करें",
+  "cert_share": "शेयर करें",
+  "cert_verify": "सत्यापित करें",
+
+  "notifications_title": "सूचनाएँ",
+  "notifications_empty": "अभी कोई सूचना नहीं",
+
+  "profile_title": "प्रोफ़ाइल",
+  "profile_language": "ऐप भाषा",
+  "profile_biometric": "बायोमेट्रिक अनलॉक",
+  "profile_logout": "लॉग आउट",
+  "profile_version": "संस्करण {version}",
+  "@profile_version": {
+    "placeholders": {
+      "version": {"type": "String"}
+    }
+  },
+
+  "teacher_today_title": "आज",
+  "teacher_batch": "बैच",
+  "teacher_schedule": "कार्यक्रम",
+  "teacher_attendance_title": "उपस्थिति",
+  "teacher_attendance_mark_all": "सभी उपस्थित चिह्नित करें",
+  "teacher_attendance_scan": "स्कैन मोड",
+  "teacher_attendance_submit": "उपस्थिति जमा करें",
+  "teacher_attendance_submitted": "उपस्थिति दर्ज। {absent} छात्र अनुपस्थित — अभिभावकों को सूचित किया जा रहा है…",
+  "@teacher_attendance_submitted": {
+    "placeholders": {
+      "absent": {"type": "int"}
+    }
+  },
+  "teacher_present": "उ",
+  "teacher_absent": "अ",
+  "teacher_marks_title": "अंक प्रविष्टि",
+  "teacher_theory": "सैद्धांतिक",
+  "teacher_practical": "व्यावहारिक",
+  "teacher_viva": "मौखिक",
+  "teacher_bulk_paste": "बल्क पेस्ट",
+  "teacher_marks_submit": "अंक जमा करें",
+  "teacher_moderation_pending": "जमा हो गया — मॉडरेशन प्रतीक्षित",
+  "teacher_announcements_title": "घोषणाएँ",
+  "teacher_post_announcement": "घोषणा पोस्ट करें",
+  "announcement_title_hint": "शीर्षक",
+  "announcement_body_hint": "संदेश",
+  "announcement_audience": "दर्शक",
+
+  "nav_home": "होम",
+  "nav_courses": "कोर्स",
+  "nav_exams": "परीक्षाएँ",
+  "nav_fees": "शुल्क",
+  "nav_profile": "प्रोफ़ाइल",
+  "nav_today": "आज",
+  "nav_attendance": "उपस्थिति",
+  "nav_marks": "अंक",
+  "nav_announcements": "घोषणाएँ",
+
+  "empty_state_default": "यहाँ अभी कुछ नहीं है",
+  "empty_state_courses": "कोई कोर्स नामांकित नहीं",
+  "empty_state_exams": "कोई परीक्षा निर्धारित नहीं",
+  "empty_state_fees": "सभी शुल्क अद्यतन हैं!",
+  "empty_state_certificates": "अभी कोई प्रमाण पत्र नहीं"
+}
