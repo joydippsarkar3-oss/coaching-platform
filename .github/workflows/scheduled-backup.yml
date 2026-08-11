@@ -1,0 +1,55 @@
+name: Scheduled Database Backup
+
+on:
+  schedule:
+    - cron: '0 2 * * *'   # daily at 02:00 UTC
+  workflow_dispatch:        # allow manual trigger
+
+jobs:
+  backup:
+    name: PostgreSQL Backup → S3
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      PGHOST:     ${{ secrets.PGHOST }}
+      PGPORT:     ${{ secrets.PGPORT }}
+      PGUSER:     ${{ secrets.PGUSER }}
+      PGPASSWORD: ${{ secrets.PGPASSWORD }}
+      PGDATABASE: ${{ secrets.PGDATABASE }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ secrets.AWS_REGION }}
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Run database backup
+        id: backup
+        env:
+          S3_BACKUP_BUCKET: ${{ secrets.S3_BACKUP_BUCKET }}
+        run: bash scripts/backup-db.sh
+
+      - name: Notify Slack on failure
+        if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          PAYLOAD=$(printf '{"text":":red_circle: *CompuTrain DB Backup FAILED*\nWorkflow: %s\nRun: %s\nRef: %s"}' \
+            "$GITHUB_WORKFLOW" \
+            "$GITHUB_RUN_ID" \
+            "$GITHUB_REF_NAME")
+          curl -s -o /dev/null -w '%{http_code}\n' \
+            -X POST -H 'Content-type: application/json' \
+            --data "$PAYLOAD" \
+            "$SLACK_WEBHOOK_URL"

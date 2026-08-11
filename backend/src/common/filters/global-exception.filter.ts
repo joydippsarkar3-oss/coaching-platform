@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
+import { captureException } from '../monitoring/sentry.setup';
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
@@ -53,6 +54,11 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       message = 'Database validation error';
     } else if (exception instanceof Error) {
       this.logger.error(exception.message, exception.stack);
+    }
+
+    // Report server-side errors to Sentry (4xx are expected client errors, skip them)
+    if (status >= 500) {
+      captureException(exception, { path: request.url, statusCode: status });
     }
 
     response.status(status).json({

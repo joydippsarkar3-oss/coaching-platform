@@ -4,6 +4,7 @@ import { SendNotificationDto } from './dto/notification.dto';
 import { NotificationChannel } from '@prisma/client';
 import { WabaProvider } from './providers/waba.provider';
 import { SmsProvider } from './providers/sms.provider';
+import { EmailProvider } from './providers/email.provider';
 
 @Injectable()
 export class NotificationsService {
@@ -13,6 +14,7 @@ export class NotificationsService {
     private readonly prisma: PrismaService,
     private readonly waba: WabaProvider,
     private readonly sms: SmsProvider,
+    private readonly email: EmailProvider,
   ) {}
 
   async send(dto: SendNotificationDto, centerId?: string) {
@@ -82,8 +84,7 @@ export class NotificationsService {
         await this.waba.sendText(recipient, body);
         break;
       case 'EMAIL':
-        // TODO: wire SES/SendGrid provider when email is needed
-        this.logger.debug(`[Email stub] To: ${recipient} | Subject: ${subject}`);
+        await this.email.send(recipient, subject ?? '', body);
         break;
       case 'PUSH':
         // TODO: wire FCM provider — token stored in recipient field

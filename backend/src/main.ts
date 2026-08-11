@@ -1,3 +1,6 @@
+import { initSentry } from './common/monitoring/sentry.setup';
+initSentry();
+
 import { NestFactory, Reflector } from '@nestjs/core';
 import { ValidationPipe, ClassSerializerInterceptor } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
