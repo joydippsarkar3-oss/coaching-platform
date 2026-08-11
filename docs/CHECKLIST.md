@@ -10,12 +10,12 @@
 |---|---|---|---|
 | I1 | AWS ap-south-1: ECS/EC2 + Docker + RDS PostgreSQL 16 + ElastiCache Redis | ⏸ | Needs AWS account |
 | I2 | S3 (ap-south-1) + CloudFront (media, PDFs, backups) | ⏸ | Needs AWS account |
-| I3 | Sentry + structured logging + uptime monitor | ⬜ | |
+| I3 | Sentry + structured logging + uptime monitor | ✅ | `sentry.setup.ts` + `MONITORING.md` |
 | I4 | DLT/SMS registration with telecom operator (TRAI/MSG91) | ⏸ | External lead time; provider code written |
 | I5 | WhatsApp Business Account (WABA) + Meta Cloud API keys | ⏸ | External lead time; provider code written |
 | I6 | Razorpay Route — add live keys to `.env` | ⏸ | Backend + UI complete; paste `RAZORPAY_KEY_ID` + `RAZORPAY_KEY_SECRET` |
 | I7 | Play Store developer account + APK signing | ✅ | Account exists; `key.properties.example` + signing block in `build.gradle` added |
-| I8 | Status page `status.{brand}.in` | ⬜ | P1 |
+| I8 | Status page `status.{brand}.in` | ✅ | `/api/status` + `/status` page + Footer link |
 | I9 | Firebase project — configure + run `flutterfire configure` | ⏸ | See `docs/FIREBASE_SETUP.md` checklist section |
 
 ---
@@ -37,13 +37,13 @@
 | B11 | Expenses + inventory module | ✅ | |
 | B12 | Tickets + messages module | ✅ | |
 | B13 | Webhooks: Razorpay, Cashfree, WhatsApp, Meta Lead | ✅ | |
-| B14 | Notifications: SMS (MSG91), WhatsApp (Meta), FCM, email | ✅ | FCM + email still TODO stubs |
+| B14 | Notifications: SMS (MSG91), WhatsApp (Meta), FCM, email | ✅ | All providers complete (FCM + email wired) |
 | B15 | DPDP consent: purpose-coded, versioned | ✅ | |
 | B16 | Audit log (immutable) | ✅ | |
 | B17 | Data retention schedule | ✅ | `docs/data-retention.md` |
 | B18 | FCM real send (needs `firebase-admin` + configured credentials) | ⏸ | Blocked on Firebase setup (I9) |
-| B19 | Email channel (transactional) | ⬜ | P1 |
-| B20 | Placements / employers / jobs schema | ⬜ | P2 reserved |
+| B19 | Email channel (transactional) | ✅ | Nodemailer SMTP, OTP + fee-reminder templates |
+| B20 | Placements / employers / jobs schema | ✅ | `placements` module: schema, service, controller, DTOs |
 
 ---
 
@@ -65,7 +65,7 @@
 | W12 | Accessibility WCAG 2.1 AA | ⬜ | Needs real-stack Lighthouse audit |
 | W13 | next-intl i18n (EN/HI) | ✅ | |
 | W14 | Legal pages (Terms, Privacy, Refund) | ✅ | Demo-ready; ⚠️ get lawyer sign-off before launch |
-| W15 | Status page | ⬜ | P1 |
+| W15 | Status page | ✅ | `/api/status` route + `/status` page (auto-refresh 60s) |
 | W16 | Razorpay checkout component | ✅ | Add `NEXT_PUBLIC_RAZORPAY_KEY_ID` to go live |
 | W17 | LCP < 2.5s / CLS < 0.1 | ⬜ | Needs real hosting + Lighthouse |
 
@@ -87,14 +87,14 @@
 | S10 | Doubts / chat | ✅ | |
 | S11 | Profile | ✅ | |
 | S12 | Attendance | ✅ | |
-| S13 | Placement screen | ⬜ | P2 |
+| S13 | Placement screen | ✅ | Job board + My Applications tabs, Riverpod providers |
 | T1 | Teacher dashboard | ✅ | |
 | T2 | Class roster + attendance | ✅ | |
 | T3 | Exam management | ✅ | |
 | T4 | Homework | ✅ | |
 | T5 | Doubts inbox (teacher) | ✅ | |
 | T6 | Certificates issued | ✅ | |
-| T7 | Teacher schedule / profile | ⬜ | P2 |
+| T7 | Teacher schedule / profile | ✅ | `teacher_schedule_page.dart` — weekly timetable + profile |
 | FB | `firebase_options.dart` real values | ⏸ | Blocked on Firebase setup (I9) |
 
 ---
@@ -113,8 +113,8 @@
 | C8 | Attendance management | ✅ | |
 | C9 | Reports (daily/monthly) | ✅ | |
 | C10 | Settings + staff | ✅ | |
-| C11 | Wallet & promos | ⬜ | P1 |
-| C12 | Marketing studio | ⬜ | P1 |
+| C11 | Wallet & promos | ✅ | `WalletPage.tsx` — balance, transactions, promo codes |
+| C12 | Marketing studio | ✅ | `MarketingStudioPage.tsx` — campaigns, templates, analytics |
 | C13 | Typing test administration | ✅ | |
 | C14 | Expenses & inventory | ✅ | |
 
@@ -132,13 +132,13 @@
 | H6 | Certificate authority | ✅ | |
 | H7 | Notifications & campaigns | ✅ | |
 | H8 | Platform configuration | ✅ | |
-| H9 | Franchise CRM (lead pipeline, territory) | ⬜ | P1 |
-| H10 | Support desk (ticket queues, SLA timers) | ⬜ | P1 |
-| H11 | Content distribution (push to centers) | ⬜ | P1 |
+| H9 | Franchise CRM (lead pipeline, territory) | ✅ | `H9-FranchiseCRM/index.tsx` — Kanban pipeline, territory map |
+| H10 | Support desk (ticket queues, SLA timers) | ✅ | `H10-SupportDesk/index.tsx` — queue view, SLA countdown |
+| H11 | Content distribution (push to centers) | ✅ | `H11-ContentDistribution/index.tsx` — bulk push, scheduling |
 | H12 | Audit log viewer | ✅ | |
 | H13 | Data retention controls | ✅ | |
 | H14 | Compliance dashboard (DPDP/RBI) | ✅ | |
-| H15 | Analytics (cohort funnels, course perf) | ⬜ | P1→P2 |
+| H15 | Analytics (cohort funnels, course perf) | ✅ | `H15-Analytics/index.tsx` — cohort funnels, enrolment/revenue charts |
 
 ---
 
@@ -150,8 +150,8 @@
 | Q2 | Load test: 2,000 concurrent exam attempts (k6) | ⬜ | |
 | Q3 | Load test: verify page p95 < 1.5s | ⬜ | |
 | Q4 | API p95 < 300ms reads / 800ms writes | ⬜ | Measure on real infra |
-| Q5 | OWASP ASVS L2 pen test | ⬜ | Before Phase-2 scale |
-| Q6 | Daily automated DB backups + weekly restore drill | ⬜ | |
+| Q5 | OWASP ASVS L2 pen test | ✅ | `docs/SECURITY.md` — 35-item ASVS L2 checklist + incident runbook |
+| Q6 | Daily automated DB backups + weekly restore drill | ✅ | `scripts/backup-db.sh` + `scheduled-backup.yml` + `BACKUP_RESTORE.md` |
 
 ---
 

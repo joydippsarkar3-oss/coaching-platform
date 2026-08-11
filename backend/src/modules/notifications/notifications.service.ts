@@ -5,6 +5,7 @@ import { NotificationChannel } from '@prisma/client';
 import { WabaProvider } from './providers/waba.provider';
 import { SmsProvider } from './providers/sms.provider';
 import { EmailProvider } from './providers/email.provider';
+import { FcmProvider } from './providers/fcm.provider';
 
 @Injectable()
 export class NotificationsService {
@@ -15,6 +16,7 @@ export class NotificationsService {
     private readonly waba: WabaProvider,
     private readonly sms: SmsProvider,
     private readonly email: EmailProvider,
+    private readonly fcm: FcmProvider,
   ) {}
 
   async send(dto: SendNotificationDto, centerId?: string) {
@@ -87,8 +89,8 @@ export class NotificationsService {
         await this.email.send(recipient, subject ?? '', body);
         break;
       case 'PUSH':
-        // TODO: wire FCM provider — token stored in recipient field
-        this.logger.debug(`[Push stub] Token: ${recipient}`);
+        // recipient field carries the FCM device registration token
+        await this.fcm.sendToDevice(recipient, subject ?? '', body);
         break;
       case 'IN_APP':
         // Delivered via DB read — no external dispatch

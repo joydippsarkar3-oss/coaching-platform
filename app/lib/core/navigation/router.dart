@@ -21,12 +21,14 @@ import '../../features/student/pages/profile_page.dart';
 import '../../features/student/pages/typing_practice_page.dart';
 import '../../features/student/pages/wallet_page.dart';
 import '../../features/student/pages/doubts_page.dart';
+import '../../features/student/pages/placement_page.dart';
 import '../../features/teacher/pages/today_page.dart';
 import '../../features/teacher/pages/attendance_page.dart';
 import '../../features/teacher/pages/marks_entry_page.dart';
 import '../../features/teacher/pages/announcements_page.dart';
 import '../../features/teacher/pages/homework_page.dart';
 import '../../features/teacher/pages/teacher_doubts_page.dart';
+import '../../features/teacher/pages/teacher_schedule_page.dart';
 import '../../features/shared/widgets/app_shell.dart';
 import 'routes.dart';
 
@@ -107,6 +109,10 @@ GoRouter router(RouterRef ref) {
             path: Routes.studentDoubts,
             builder: (ctx, _) => const DoubtsPage(),
           ),
+          GoRoute(
+            path: Routes.studentPlacement,
+            builder: (ctx, _) => const PlacementPage(),
+          ),
         ],
       ),
 
@@ -145,6 +151,10 @@ GoRouter router(RouterRef ref) {
           GoRoute(
             path: Routes.teacherDoubts,
             builder: (ctx, _) => const TeacherDoubtsPage(),
+          ),
+          GoRoute(
+            path: Routes.teacherSchedule,
+            builder: (ctx, _) => const TeacherSchedulePage(),
           ),
         ],
       ),

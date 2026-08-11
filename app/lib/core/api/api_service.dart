@@ -150,4 +150,30 @@ abstract class ApiService {
     @Field("description") required String description,
     @Field("due_date") required DateTime dueDate,
   });
+
+  // ── Schedule (teacher) ───────────────────────────────────────────────────────
+
+  @GET("/teacher/schedule")
+  Future<List<ScheduleEntry>> getTeacherSchedule();
+
+  // ── Profile (teacher) ────────────────────────────────────────────────────────
+
+  @GET("/teacher/profile")
+  Future<TeacherProfile> getTeacherProfile();
+
+  @PATCH("/teacher/profile")
+  Future<TeacherProfile> updateTeacherProfile(
+    @Body() Map<String, dynamic> data,
+  );
+
+  // ── Placement (S13) ──────────────────────────────────────────────────────────
+
+  @GET("/jobs")
+  Future<List<JobListing>> getJobListings();
+
+  @GET("/jobs/my-applications")
+  Future<List<JobApplication>> getMyApplications();
+
+  @POST("/jobs/{jobId}/apply")
+  Future<JobApplication> applyToJob(@Path("jobId") String jobId);
 }

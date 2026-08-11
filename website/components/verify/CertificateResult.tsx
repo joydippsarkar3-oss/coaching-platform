@@ -15,11 +15,14 @@ export function CertificateResult({ result }: CertificateResultProps) {
 
   return (
     <div className="space-y-4">
-      <div className={`flex items-center gap-3 rounded-xl p-4 ${cert.isValid ? "bg-success-50 border border-success-500/30" : "bg-danger-50 border border-danger-200"}`}>
+      <div
+        role="status"
+        className={`flex items-center gap-3 rounded-xl p-4 ${cert.isValid ? "bg-success-50 border border-success-500/30" : "bg-danger-50 border border-danger-200"}`}
+      >
         {cert.isValid ? (
-          <ShieldCheck className="size-8 text-success-700" />
+          <ShieldCheck className="size-8 text-success-700" aria-hidden="true" />
         ) : (
-          <ShieldX className="size-8 text-danger-500" />
+          <ShieldX className="size-8 text-danger-500" aria-hidden="true" />
         )}
         <div>
           <p className="font-semibold">{cert.isValid ? t("valid") : t("invalid")}</p>

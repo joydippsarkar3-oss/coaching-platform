@@ -1,0 +1,50 @@
+name: Load Test (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      staging_url:
+        description: 'Base URL of the staging environment'
+        required: true
+        default: 'https://staging.computrain.io'
+      auth_token:
+        description: 'Bearer token for authenticated endpoints'
+        required: true
+
+jobs:
+  load-test-baseline:
+    name: API Baseline Load Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring \
+            --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
+            --keyserver hkp://keyserver.ubuntu.com:80 \
+            --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] \
+            https://dl.k6.io/deb stable main" \
+            | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+
+      - name: Run API baseline test
+        env:
+          BASE_URL: ${{ github.event.inputs.staging_url }}
+          AUTH_TOKEN: ${{ github.event.inputs.auth_token }}
+        run: |
+          k6 run load-tests/api-baseline.js \
+            --out json=k6-results.json
+
+      - name: Upload k6 results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-results
+          path: k6-results.json
+          retention-days: 14

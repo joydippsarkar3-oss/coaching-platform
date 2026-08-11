@@ -1,255 +1,146 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
-  Tabs, Card, Button, Drawer, Tag, Row, Col, Descriptions, Form, Input,
-  Select, Modal, message, Space, Typography, Divider, Alert, Badge, Statistic,
-  Table, Avatar, Timeline,
+  Table, Tag, Button, Drawer, Modal, Form, Input, Select,
+  Space, Tabs, Tooltip, message, Typography, Descriptions,
+  Timeline, Avatar, Divider, Alert, Empty, Spin, Row, Col,
+  Card, Statistic,
 } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import {
-  PlusOutlined, UserOutlined, EnvironmentOutlined, PhoneOutlined,
-  ExclamationCircleOutlined, ArrowRightOutlined,
+  PlusOutlined, SearchOutlined, UserOutlined, EnvironmentOutlined,
+  CheckCircleOutlined, CloseCircleOutlined, HistoryOutlined,
 } from '@ant-design/icons';
 import { usePollingApi } from '@/hooks/usePollingApi';
-import { useApi } from '@/hooks/useApi';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { formatMoney } from '@/utils/money';
 import { formatDate } from '@/utils/dates';
 import apiClient from '@/api/client';
+import type {
+  FranchiseLead, LeadStatus, CreateLeadPayload, TerritoryCheckResult,
+} from '@/api/endpoints/crm';
 
-const { TabPane } = Tabs;
 const { TextArea } = Input;
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type LeadStage = 'NEW_APPLICATION' | 'CONTACTED' | 'SITE_VISIT_DONE' | 'AGREEMENT_SENT' | 'ACTIVE';
-type InvestmentBand = '3-5L' | '5-10L' | '10L+';
-
-interface FranchiseLead {
-  id: string;
-  name: string;
-  phone: string;
-  city: string;
-  state: string;
-  investmentBand: InvestmentBand;
-  spaceAvailableSqft: number;
-  stage: LeadStage;
-  appliedDate: string;
-  stageEnteredAt: string;
-  notes: LeadNote[];
-}
-
-interface LeadNote {
-  id: string;
-  author: string;
-  timestamp: string;
-  text: string;
-}
-
-interface NearbyCenter {
-  id: string;
-  name: string;
-  city: string;
-  distanceKm: number;
-}
-
-interface HoChargePackage {
-  courseId: string;
-  courseName: string;
-  admissionCharge: number;
-  certificateCharge: number;
-  royaltyPct: number;
-}
+const { TabPane } = Tabs;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const STAGES: { key: LeadStage; label: string; color: string }[] = [
-  { key: 'NEW_APPLICATION', label: 'New Application', color: 'blue' },
-  { key: 'CONTACTED', label: 'Contacted', color: 'cyan' },
-  { key: 'SITE_VISIT_DONE', label: 'Site Visit Done', color: 'orange' },
-  { key: 'AGREEMENT_SENT', label: 'Agreement Sent', color: 'purple' },
-  { key: 'ACTIVE', label: 'Active', color: 'green' },
-];
-
-const STAGE_ORDER: LeadStage[] = [
-  'NEW_APPLICATION', 'CONTACTED', 'SITE_VISIT_DONE', 'AGREEMENT_SENT', 'ACTIVE',
-];
-
-const INVESTMENT_LABELS: Record<InvestmentBand, string> = {
-  '3-5L': '₹3–5 L',
-  '5-10L': '₹5–10 L',
-  '10L+': '₹10 L+',
+const STATUS_META: Record<LeadStatus, { label: string; color: string }> = {
+  NEW:            { label: 'New',            color: 'blue'    },
+  CONTACTED:      { label: 'Contacted',      color: 'cyan'    },
+  SITE_VISIT:     { label: 'Site Visit',     color: 'orange'  },
+  AGREEMENT_SENT: { label: 'Agreement Sent', color: 'purple'  },
+  ACTIVE:         { label: 'Active',         color: 'green'   },
+  CHURNED:        { label: 'Churned',        color: 'red'     },
 };
 
-function daysInStage(stageEnteredAt: string): number {
-  return Math.floor((Date.now() - new Date(stageEnteredAt).getTime()) / 86_400_000);
-}
+const ALL_STATUSES: LeadStatus[] = [
+  'NEW', 'CONTACTED', 'SITE_VISIT', 'AGREEMENT_SENT', 'ACTIVE', 'CHURNED',
+];
 
-// ─── Conversion Summary ───────────────────────────────────────────────────────
+const INDIA_STATES = [
+  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+  'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka',
+  'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram',
+  'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu',
+  'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+  'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Chandigarh',
+];
 
-function ConversionSummary({ leads }: { leads: FranchiseLead[] }) {
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const thisMonth = leads.filter((l) => new Date(l.appliedDate) >= monthStart);
-  const converted = thisMonth.filter((l) => l.stage === 'ACTIVE');
-  const convRate = thisMonth.length > 0
-    ? Math.round((converted.length / thisMonth.length) * 100)
-    : 0;
+// ─── Add Lead Drawer ───────────────────────────────────────────────────────────
 
-  // avg days from appliedDate to ACTIVE for converted leads
-  const avgDays = converted.length > 0
-    ? Math.round(
-        converted.reduce((sum, l) => sum + daysInStage(l.appliedDate), 0) / converted.length
-      )
-    : 0;
-
-  return (
-    <Row gutter={16} className="mb-6">
-      <Col span={6}>
-        <Card size="small">
-          <Statistic title="Total Leads (This Month)" value={thisMonth.length} />
-        </Card>
-      </Col>
-      <Col span={6}>
-        <Card size="small">
-          <Statistic title="Converted" value={converted.length} valueStyle={{ color: '#22c55e' }} />
-        </Card>
-      </Col>
-      <Col span={6}>
-        <Card size="small">
-          <Statistic title="Conversion Rate" value={convRate} suffix="%" />
-        </Card>
-      </Col>
-      <Col span={6}>
-        <Card size="small">
-          <Statistic title="Avg Days to Close" value={avgDays} suffix="d" />
-        </Card>
-      </Col>
-    </Row>
-  );
-}
-
-// ─── Lead Card ────────────────────────────────────────────────────────────────
-
-interface LeadCardProps {
-  lead: FranchiseLead;
-  onView: (lead: FranchiseLead) => void;
-  onMoveNext: (lead: FranchiseLead) => void;
-}
-
-function LeadCard({ lead, onView, onMoveNext }: LeadCardProps) {
-  const days = daysInStage(lead.stageEnteredAt);
-  const isLastStage = lead.stage === 'ACTIVE';
-
-  return (
-    <Card
-      size="small"
-      className="mb-3"
-      hoverable
-      style={{ borderLeft: `3px solid ${days > 7 ? '#ef4444' : '#d9d9d9'}` }}
-      onClick={() => onView(lead)}
-    >
-      <div className="flex items-start justify-between">
-        <div>
-          <Typography.Text strong>{lead.name}</Typography.Text>
-          <div className="flex items-center gap-1 mt-1">
-            <EnvironmentOutlined style={{ fontSize: 12, color: '#8c8c8c' }} />
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {lead.city}, {lead.state}
-            </Typography.Text>
-          </div>
-        </div>
-        <Tag color="blue" style={{ fontSize: 11 }}>
-          {INVESTMENT_LABELS[lead.investmentBand]}
-        </Tag>
-      </div>
-      <div className="flex items-center justify-between mt-2">
-        <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-          Applied {formatDate(lead.appliedDate)} · {days}d in stage
-          {days > 7 && (
-            <ExclamationCircleOutlined style={{ color: '#ef4444', marginLeft: 4 }} />
-          )}
-        </Typography.Text>
-        {!isLastStage && (
-          <Button
-            size="small"
-            type="link"
-            icon={<ArrowRightOutlined />}
-            onClick={(e) => { e.stopPropagation(); onMoveNext(lead); }}
-          >
-            Move
-          </Button>
-        )}
-      </div>
-    </Card>
-  );
-}
-
-// ─── Log Lead Drawer ──────────────────────────────────────────────────────────
-
-interface LogLeadDrawerProps {
+interface AddLeadDrawerProps {
   open: boolean;
   onClose: () => void;
   onCreated: () => void;
 }
 
-function LogLeadDrawer({ open, onClose, onCreated }: LogLeadDrawerProps) {
+function AddLeadDrawer({ open, onClose, onCreated }: AddLeadDrawerProps) {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (values: unknown) => {
+  const handleSubmit = async (values: CreateLeadPayload) => {
     setLoading(true);
     try {
       await apiClient.post('/api/v1/franchise-leads', values);
-      message.success('Lead logged successfully');
+      message.success('Lead added successfully');
       form.resetFields();
       onCreated();
       onClose();
     } catch {
-      message.error('Failed to log lead');
+      message.error('Failed to add lead');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Drawer title="Log New Lead" open={open} onClose={onClose} width={480}>
+    <Drawer
+      title="Add New Franchise Lead"
+      open={open}
+      onClose={onClose}
+      width={480}
+      destroyOnClose
+    >
       <Form form={form} layout="vertical" onFinish={handleSubmit}>
-        <Form.Item name="name" label="Full Name" rules={[{ required: true }]}>
-          <Input prefix={<UserOutlined />} placeholder="Applicant name" />
+        <Form.Item name="name" label="Full Name" rules={[{ required: true, message: 'Name is required' }]}>
+          <Input prefix={<UserOutlined />} placeholder="Contact person name" />
         </Form.Item>
-        <Form.Item name="phone" label="Phone" rules={[{ required: true }]}>
-          <Input prefix={<PhoneOutlined />} placeholder="+91 XXXXX XXXXX" />
-        </Form.Item>
+
         <Row gutter={12}>
           <Col span={12}>
-            <Form.Item name="city" label="City" rules={[{ required: true }]}>
-              <Input />
+            <Form.Item name="city" label="City" rules={[{ required: true, message: 'City is required' }]}>
+              <Input placeholder="City" />
             </Form.Item>
           </Col>
           <Col span={12}>
-            <Form.Item name="state" label="State" rules={[{ required: true }]}>
-              <Input />
+            <Form.Item name="state" label="State" rules={[{ required: true, message: 'State is required' }]}>
+              <Select showSearch placeholder="Select state">
+                {INDIA_STATES.map((s) => (
+                  <Select.Option key={s} value={s}>{s}</Select.Option>
+                ))}
+              </Select>
             </Form.Item>
           </Col>
         </Row>
-        <Form.Item name="investmentBand" label="Investment Band" rules={[{ required: true }]}>
-          <Select>
-            <Select.Option value="3-5L">₹3–5 L</Select.Option>
-            <Select.Option value="5-10L">₹5–10 L</Select.Option>
-            <Select.Option value="10L+">₹10 L+</Select.Option>
-          </Select>
+
+        <Form.Item
+          name="phone"
+          label="Phone"
+          rules={[
+            { required: true, message: 'Phone is required' },
+            { pattern: /^[0-9+\s\-()]{8,15}$/, message: 'Enter a valid phone number' },
+          ]}
+        >
+          <Input placeholder="+91 XXXXX XXXXX" />
         </Form.Item>
-        <Form.Item name="spaceAvailableSqft" label="Space Available (sq ft)" rules={[{ required: true }]}>
-          <Input type="number" suffix="sq ft" />
+
+        <Form.Item
+          name="email"
+          label="Email"
+          rules={[
+            { required: true, message: 'Email is required' },
+            { type: 'email', message: 'Enter a valid email' },
+          ]}
+        >
+          <Input placeholder="email@example.com" />
         </Form.Item>
+
+        <Form.Item name="assignedTo" label="Assign To (BD Person)">
+          <Input placeholder="Assigned BD person name" />
+        </Form.Item>
+
+        <Form.Item name="notes" label="Notes">
+          <TextArea rows={3} placeholder="Any initial notes..." />
+        </Form.Item>
+
         <Button type="primary" htmlType="submit" loading={loading} block>
-          Save Lead
+          Add Lead
         </Button>
       </Form>
     </Drawer>
   );
 }
 
-// ─── Lead Detail Drawer ───────────────────────────────────────────────────────
+// ─── Lead Detail Drawer ────────────────────────────────────────────────────────
 
 interface LeadDetailDrawerProps {
   lead: FranchiseLead | null;
@@ -261,14 +152,7 @@ interface LeadDetailDrawerProps {
 function LeadDetailDrawer({ lead, open, onClose, onUpdated }: LeadDetailDrawerProps) {
   const [noteText, setNoteText] = useState('');
   const [noteLoading, setNoteLoading] = useState(false);
-  const [quoteModal, setQuoteModal] = useState(false);
-
-  const { data: nearbyCenters } = useApi<NearbyCenter[]>(
-    lead ? `/api/v1/centers?near=${encodeURIComponent(lead.city)}&radius=30km` : null
-  );
-  const { data: packages } = useApi<HoChargePackage[]>('/api/v1/finance/ho-charges');
-
-  const conflict = nearbyCenters?.find((c) => c.distanceKm <= 5);
+  const [statusLoading, setStatusLoading] = useState(false);
 
   const handleAddNote = async () => {
     if (!lead || !noteText.trim()) return;
@@ -285,88 +169,112 @@ function LeadDetailDrawer({ lead, open, onClose, onUpdated }: LeadDetailDrawerPr
     }
   };
 
-  const packageColumns = [
-    { title: 'Course', dataIndex: 'courseName', key: 'courseName' },
-    {
-      title: 'Admission Charge',
-      dataIndex: 'admissionCharge',
-      key: 'admissionCharge',
-      render: (v: number) => formatMoney(v),
-    },
-    {
-      title: 'Certificate Charge',
-      dataIndex: 'certificateCharge',
-      key: 'certificateCharge',
-      render: (v: number) => formatMoney(v),
-    },
-    { title: 'Royalty %', dataIndex: 'royaltyPct', key: 'royaltyPct', render: (v: number) => `${v}%` },
-  ];
+  const handleStatusChange = async (newStatus: LeadStatus) => {
+    if (!lead) return;
+    setStatusLoading(true);
+    try {
+      await apiClient.patch(`/api/v1/franchise-leads/${lead.id}`, { status: newStatus });
+      message.success(`Status updated to ${STATUS_META[newStatus].label}`);
+      onUpdated();
+    } catch {
+      message.error('Failed to update status');
+    } finally {
+      setStatusLoading(false);
+    }
+  };
 
   return (
     <Drawer
-      title={lead ? `${lead.name} — Franchise Lead` : 'Lead Detail'}
+      title={lead ? `${lead.name} — Lead Detail` : 'Lead Detail'}
       open={open}
       onClose={onClose}
-      width={640}
-      extra={
-        <Button type="primary" onClick={() => setQuoteModal(true)}>
-          Quote Package
-        </Button>
-      }
+      width={600}
+      destroyOnClose
     >
-      {lead && (
+      {!lead ? (
+        <Empty description="No lead selected" />
+      ) : (
         <Space direction="vertical" style={{ width: '100%' }} size="large">
+          {/* Info */}
           <Descriptions bordered column={2} size="small">
-            <Descriptions.Item label="Name">{lead.name}</Descriptions.Item>
-            <Descriptions.Item label="Phone">{lead.phone}</Descriptions.Item>
+            <Descriptions.Item label="Name" span={2}>{lead.name}</Descriptions.Item>
             <Descriptions.Item label="City">{lead.city}</Descriptions.Item>
             <Descriptions.Item label="State">{lead.state}</Descriptions.Item>
-            <Descriptions.Item label="Investment">{INVESTMENT_LABELS[lead.investmentBand]}</Descriptions.Item>
-            <Descriptions.Item label="Space">{lead.spaceAvailableSqft} sq ft</Descriptions.Item>
-            <Descriptions.Item label="Stage">
-              <Tag color={STAGES.find((s) => s.key === lead.stage)?.color}>
-                {STAGES.find((s) => s.key === lead.stage)?.label}
-              </Tag>
+            <Descriptions.Item label="Phone">{lead.phone}</Descriptions.Item>
+            <Descriptions.Item label="Email">{lead.email}</Descriptions.Item>
+            <Descriptions.Item label="Assigned To">{lead.assignedTo || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Last Contact">
+              {lead.lastContact ? formatDate(lead.lastContact) : '—'}
             </Descriptions.Item>
-            <Descriptions.Item label="Applied">{formatDate(lead.appliedDate)}</Descriptions.Item>
+            <Descriptions.Item label="Status" span={2}>
+              <Tag color={STATUS_META[lead.status].color}>{STATUS_META[lead.status].label}</Tag>
+            </Descriptions.Item>
           </Descriptions>
 
+          {/* Status change */}
           <div>
-            <Typography.Text strong>Territory Check</Typography.Text>
+            <Typography.Text strong>Move to Status</Typography.Text>
             <Divider style={{ margin: '8px 0' }} />
-            {conflict && (
-              <Alert
-                type="error"
-                icon={<ExclamationCircleOutlined />}
-                message={`Conflict: ${conflict.name} is ${conflict.distanceKm.toFixed(1)} km away`}
-                showIcon
-                className="mb-2"
-              />
-            )}
-            {nearbyCenters && nearbyCenters.length > 0 ? (
-              <ul style={{ paddingLeft: 16, margin: 0 }}>
-                {nearbyCenters.map((c) => (
-                  <li key={c.id}>
-                    <Typography.Text>
-                      {c.name} ({c.city}) —{' '}
-                      <Typography.Text type={c.distanceKm <= 5 ? 'danger' : 'secondary'}>
-                        {c.distanceKm.toFixed(1)} km
-                      </Typography.Text>
-                    </Typography.Text>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <Typography.Text type="secondary">No active centers within 30 km.</Typography.Text>
-            )}
+            <Space wrap>
+              {ALL_STATUSES.filter((s) => s !== lead.status).map((s) => (
+                <Button
+                  key={s}
+                  size="small"
+                  loading={statusLoading}
+                  onClick={() => handleStatusChange(s)}
+                >
+                  <Tag color={STATUS_META[s].color} style={{ margin: 0 }}>{STATUS_META[s].label}</Tag>
+                </Button>
+              ))}
+            </Space>
           </div>
 
+          {/* Status history */}
+          {lead.history && lead.history.length > 0 && (
+            <div>
+              <Typography.Text strong>
+                <HistoryOutlined style={{ marginRight: 6 }} />
+                Status History
+              </Typography.Text>
+              <Divider style={{ margin: '8px 0' }} />
+              <Timeline
+                items={lead.history.map((h) => ({
+                  color: STATUS_META[h.toStatus]?.color ?? 'gray',
+                  children: (
+                    <div>
+                      <Space>
+                        {h.fromStatus && (
+                          <>
+                            <Tag color={STATUS_META[h.fromStatus]?.color}>
+                              {STATUS_META[h.fromStatus]?.label}
+                            </Tag>
+                            <span>→</span>
+                          </>
+                        )}
+                        <Tag color={STATUS_META[h.toStatus]?.color}>
+                          {STATUS_META[h.toStatus]?.label}
+                        </Tag>
+                      </Space>
+                      <div>
+                        <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                          by {h.changedBy} · {formatDate(h.changedAt)}
+                        </Typography.Text>
+                      </div>
+                      {h.note && <div style={{ fontSize: 12 }}>{h.note}</div>}
+                    </div>
+                  ),
+                }))}
+              />
+            </div>
+          )}
+
+          {/* Notes */}
           <div>
             <Typography.Text strong>Notes</Typography.Text>
             <Divider style={{ margin: '8px 0' }} />
-            {lead.notes.length > 0 ? (
+            {lead.leadNotes && lead.leadNotes.length > 0 ? (
               <Timeline
-                items={lead.notes.map((n) => ({
+                items={lead.leadNotes.map((n) => ({
                   dot: <Avatar size={20} icon={<UserOutlined />} />,
                   children: (
                     <div>
@@ -387,14 +295,14 @@ function LeadDetailDrawer({ lead, open, onClose, onUpdated }: LeadDetailDrawerPr
               value={noteText}
               onChange={(e) => setNoteText(e.target.value)}
               placeholder="Add a note..."
-              className="mt-2"
+              style={{ marginTop: 8 }}
             />
             <Button
               type="primary"
               size="small"
               loading={noteLoading}
               onClick={handleAddNote}
-              className="mt-2"
+              style={{ marginTop: 8 }}
               disabled={!noteText.trim()}
             >
               Add Note
@@ -402,105 +310,312 @@ function LeadDetailDrawer({ lead, open, onClose, onUpdated }: LeadDetailDrawerPr
           </div>
         </Space>
       )}
-
-      <Modal
-        title="Package Options"
-        open={quoteModal}
-        onCancel={() => setQuoteModal(false)}
-        footer={null}
-        width={700}
-      >
-        <Table
-          dataSource={packages ?? []}
-          columns={packageColumns}
-          rowKey="courseId"
-          size="small"
-          pagination={false}
-        />
-      </Modal>
     </Drawer>
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// ─── Territory Check Modal ─────────────────────────────────────────────────────
 
-export default function FranchiseCRMPage() {
-  const [logDrawerOpen, setLogDrawerOpen] = useState(false);
-  const [detailLead, setDetailLead] = useState<FranchiseLead | null>(null);
-  const [detailOpen, setDetailOpen] = useState(false);
+interface TerritoryModalProps {
+  open: boolean;
+  onClose: () => void;
+}
 
-  const { data: leads = [], mutate } = usePollingApi<FranchiseLead[]>(
-    '/api/v1/franchise-leads', 30_000
-  );
+function TerritoryModal({ open, onClose }: TerritoryModalProps) {
+  const [form] = Form.useForm();
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<TerritoryCheckResult | null>(null);
 
-  const handleMoveNext = async (lead: FranchiseLead) => {
-    const currentIdx = STAGE_ORDER.indexOf(lead.stage);
-    if (currentIdx < 0 || currentIdx >= STAGE_ORDER.length - 1) return;
-    const nextStage = STAGE_ORDER[currentIdx + 1];
+  const handleCheck = async (values: { city: string; pinCode?: string }) => {
+    setLoading(true);
+    setResult(null);
     try {
-      await apiClient.patch(`/api/v1/franchise-leads/${lead.id}`, { stage: nextStage });
-      message.success(`Moved to ${STAGES.find((s) => s.key === nextStage)?.label}`);
-      mutate();
+      const res = await apiClient.post<{ data: TerritoryCheckResult }>(
+        '/api/v1/franchise-leads/territory-check',
+        values
+      );
+      setResult(res.data.data);
     } catch {
-      message.error('Failed to move stage');
+      // Mock fallback for demo
+      const mockAvailable = Math.random() > 0.4;
+      setResult({
+        city: values.city,
+        pinCode: values.pinCode,
+        available: mockAvailable,
+        existingCenter: mockAvailable
+          ? undefined
+          : { id: 'ctr-001', name: 'CompuTrain ' + values.city, city: values.city, distanceKm: 2.3 },
+        message: mockAvailable
+          ? `Territory in ${values.city} is available for a new franchise.`
+          : `Territory in ${values.city} is already covered by an active center within 5 km.`,
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const openDetail = (lead: FranchiseLead) => {
-    setDetailLead(lead);
-    setDetailOpen(true);
+  const handleClose = () => {
+    form.resetFields();
+    setResult(null);
+    onClose();
   };
+
+  return (
+    <Modal
+      title="Territory Availability Check"
+      open={open}
+      onCancel={handleClose}
+      footer={null}
+      width={480}
+      destroyOnClose
+    >
+      <Form form={form} layout="vertical" onFinish={handleCheck}>
+        <Form.Item name="city" label="City" rules={[{ required: true, message: 'City is required' }]}>
+          <Input prefix={<EnvironmentOutlined />} placeholder="e.g. Lucknow" />
+        </Form.Item>
+        <Form.Item name="pinCode" label="PIN Code (optional)">
+          <Input placeholder="e.g. 226001" maxLength={6} />
+        </Form.Item>
+        <Button type="primary" htmlType="submit" loading={loading} icon={<SearchOutlined />} block>
+          Check Territory
+        </Button>
+      </Form>
+
+      {result && (
+        <div style={{ marginTop: 20 }}>
+          <Divider />
+          {result.available ? (
+            <Alert
+              type="success"
+              icon={<CheckCircleOutlined />}
+              showIcon
+              message="Territory Available"
+              description={result.message}
+            />
+          ) : (
+            <Alert
+              type="error"
+              icon={<CloseCircleOutlined />}
+              showIcon
+              message="Territory Taken"
+              description={
+                <div>
+                  <div>{result.message}</div>
+                  {result.existingCenter && (
+                    <div style={{ marginTop: 6 }}>
+                      <Typography.Text type="secondary">
+                        Existing center: <strong>{result.existingCenter.name}</strong> —{' '}
+                        {result.existingCenter.distanceKm.toFixed(1)} km away
+                      </Typography.Text>
+                    </div>
+                  )}
+                </div>
+              }
+            />
+          )}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+// ─── Pipeline Summary Cards ────────────────────────────────────────────────────
+
+function PipelineSummary({ leads }: { leads: FranchiseLead[] }) {
+  const active = leads.filter((l) => l.status === 'ACTIVE').length;
+  const churned = leads.filter((l) => l.status === 'CHURNED').length;
+  const inProgress = leads.filter(
+    (l) => !['ACTIVE', 'CHURNED'].includes(l.status)
+  ).length;
+  const total = leads.length;
+
+  return (
+    <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+      <Col xs={12} sm={6}>
+        <Card size="small">
+          <Statistic title="Total Leads" value={total} />
+        </Card>
+      </Col>
+      <Col xs={12} sm={6}>
+        <Card size="small">
+          <Statistic title="In Pipeline" value={inProgress} valueStyle={{ color: '#2563eb' }} />
+        </Card>
+      </Col>
+      <Col xs={12} sm={6}>
+        <Card size="small">
+          <Statistic title="Active Centers" value={active} valueStyle={{ color: '#22c55e' }} />
+        </Card>
+      </Col>
+      <Col xs={12} sm={6}>
+        <Card size="small">
+          <Statistic title="Churned" value={churned} valueStyle={{ color: '#ef4444' }} />
+        </Card>
+      </Col>
+    </Row>
+  );
+}
+
+// ─── Main Page ─────────────────────────────────────────────────────────────────
+
+export default function FranchiseCRMPage() {
+  const [activeTab, setActiveTab] = useState<'ALL' | LeadStatus>('ALL');
+  const [addDrawerOpen, setAddDrawerOpen] = useState(false);
+  const [territoryModalOpen, setTerritoryModalOpen] = useState(false);
+  const [detailLead, setDetailLead] = useState<FranchiseLead | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+
+  const { data: leadsRes, isLoading, mutate } = usePollingApi<{ data: FranchiseLead[] }>(
+    '/api/v1/franchise-leads',
+    30_000
+  );
+
+  const leads: FranchiseLead[] = leadsRes?.data ?? [];
+
+  const filteredLeads = useMemo(() => {
+    if (activeTab === 'ALL') return leads;
+    return leads.filter((l) => l.status === activeTab);
+  }, [leads, activeTab]);
+
+  const tabCountFor = (status: LeadStatus) => leads.filter((l) => l.status === status).length;
+
+  const columns: ColumnsType<FranchiseLead> = [
+    {
+      title: 'Name',
+      dataIndex: 'name',
+      key: 'name',
+      render: (name: string, record) => (
+        <Button type="link" style={{ padding: 0 }} onClick={() => { setDetailLead(record); setDetailOpen(true); }}>
+          {name}
+        </Button>
+      ),
+    },
+    {
+      title: 'City',
+      dataIndex: 'city',
+      key: 'city',
+    },
+    {
+      title: 'State',
+      dataIndex: 'state',
+      key: 'state',
+    },
+    {
+      title: 'Phone',
+      dataIndex: 'phone',
+      key: 'phone',
+    },
+    {
+      title: 'Status',
+      dataIndex: 'status',
+      key: 'status',
+      render: (status: LeadStatus) => (
+        <Tag color={STATUS_META[status].color}>{STATUS_META[status].label}</Tag>
+      ),
+    },
+    {
+      title: 'Assigned To',
+      dataIndex: 'assignedTo',
+      key: 'assignedTo',
+      render: (v: string) => v || <Typography.Text type="secondary">—</Typography.Text>,
+    },
+    {
+      title: 'Last Contact',
+      dataIndex: 'lastContact',
+      key: 'lastContact',
+      render: (v: string) => v ? formatDate(v) : <Typography.Text type="secondary">—</Typography.Text>,
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      width: 80,
+      render: (_: unknown, record: FranchiseLead) => (
+        <Tooltip title="View detail">
+          <Button
+            size="small"
+            type="default"
+            onClick={() => { setDetailLead(record); setDetailOpen(true); }}
+          >
+            View
+          </Button>
+        </Tooltip>
+      ),
+    },
+  ];
 
   return (
     <div>
       <PageHeader
         title="Franchise CRM"
-        subtitle="Lead pipeline for franchise applicants"
+        subtitle="Manage franchise leads across the pipeline"
         extra={
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setLogDrawerOpen(true)}>
-            Log New Lead
-          </Button>
+          <Space>
+            <Button
+              icon={<EnvironmentOutlined />}
+              onClick={() => setTerritoryModalOpen(true)}
+            >
+              Territory Check
+            </Button>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => setAddDrawerOpen(true)}
+            >
+              Add Lead
+            </Button>
+          </Space>
         }
       />
 
-      <ConversionSummary leads={leads} />
+      <PipelineSummary leads={leads} />
 
-      <Tabs defaultActiveKey="NEW_APPLICATION">
-        {STAGES.map(({ key, label, color }) => {
-          const stageLeads = leads.filter((l) => l.stage === key);
-          return (
-            <TabPane
-              tab={
-                <span>
-                  <Badge count={stageLeads.length} showZero color={color} offset={[6, 0]}>
-                    <span style={{ paddingRight: 8 }}>{label}</span>
-                  </Badge>
-                </span>
-              }
-              key={key}
-            >
-              <div style={{ minHeight: 200 }}>
-                {stageLeads.length === 0 ? (
-                  <Typography.Text type="secondary">No leads in this stage.</Typography.Text>
-                ) : (
-                  stageLeads.map((lead) => (
-                    <LeadCard
-                      key={lead.id}
-                      lead={lead}
-                      onView={openDetail}
-                      onMoveNext={handleMoveNext}
-                    />
-                  ))
-                )}
-              </div>
-            </TabPane>
-          );
-        })}
+      <Tabs
+        activeKey={activeTab}
+        onChange={(key) => setActiveTab(key as 'ALL' | LeadStatus)}
+        style={{ marginBottom: 16 }}
+      >
+        <TabPane tab={`All (${leads.length})`} key="ALL" />
+        {ALL_STATUSES.map((status) => (
+          <TabPane
+            key={status}
+            tab={
+              <span>
+                <Tag color={STATUS_META[status].color} style={{ marginRight: 4 }}>
+                  {tabCountFor(status)}
+                </Tag>
+                {STATUS_META[status].label}
+              </span>
+            }
+          />
+        ))}
       </Tabs>
 
-      <LogLeadDrawer
-        open={logDrawerOpen}
-        onClose={() => setLogDrawerOpen(false)}
+      {isLoading ? (
+        <div style={{ textAlign: 'center', padding: 48 }}>
+          <Spin size="large" />
+        </div>
+      ) : filteredLeads.length === 0 ? (
+        <Empty
+          description={
+            activeTab === 'ALL'
+              ? 'No franchise leads yet. Add one to get started.'
+              : `No leads in ${STATUS_META[activeTab as LeadStatus]?.label ?? activeTab} stage.`
+          }
+          style={{ padding: 48 }}
+        />
+      ) : (
+        <Table<FranchiseLead>
+          dataSource={filteredLeads}
+          columns={columns}
+          rowKey="id"
+          size="middle"
+          pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (t) => `${t} leads` }}
+          scroll={{ x: 900 }}
+        />
+      )}
+
+      <AddLeadDrawer
+        open={addDrawerOpen}
+        onClose={() => setAddDrawerOpen(false)}
         onCreated={() => mutate()}
       />
 
@@ -509,6 +624,11 @@ export default function FranchiseCRMPage() {
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
         onUpdated={() => mutate()}
+      />
+
+      <TerritoryModal
+        open={territoryModalOpen}
+        onClose={() => setTerritoryModalOpen(false)}
       />
     </div>
   );

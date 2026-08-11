@@ -1,22 +1,15 @@
+import { DeleteOutlined, PlusOutlined, TagsOutlined, WalletOutlined } from '@ant-design/icons'
 import {
-  CheckCircleOutlined,
-  DownloadOutlined,
-  PlusOutlined,
-  SearchOutlined,
-} from '@ant-design/icons'
-import {
-  Badge,
   Button,
   Card,
   Col,
   DatePicker,
-  Drawer,
   Form,
   Input,
   InputNumber,
   Modal,
+  Popconfirm,
   Row,
-  Switch,
   Table,
   Tabs,
   Tag,
@@ -26,385 +19,231 @@ import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { useState } from 'react'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { MoneyDisplay } from '@/components/shared/MoneyDisplay'
 import { useApi } from '@/hooks/useApi'
-import { useAuthStore } from '@/store/auth.store'
-import { formatMoney, rupeesToPaise } from '@/utils/money'
-import { formatDate } from '@/utils/dates'
+import { formatMoney } from '@/utils/money'
 import apiClient from '@/api/client'
 import type { ApiResponse } from '@/types/api'
 import type {
-  WalletSummary,
-  WalletTransaction,
-  PromoCampaign,
-  CreateCampaignPayload,
-  ManualCreditPayload,
+  CenterWalletBalance,
+  CenterTransaction,
+  PromoCode,
+  CreatePromoCodePayload,
 } from '@/api/endpoints/wallet'
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+// ── Wallet Tab ──────────────────────────────────────────────────────────────
 
-function txnTypeLabel(type: WalletTransaction['type']): string {
-  const map: Record<WalletTransaction['type'], string> = {
-    welcome: 'Welcome Bonus',
-    referral: 'Referral Reward',
-    refund: 'Refund',
-    fee_redemption: 'Fee Redemption',
-    manual_credit: 'Manual Credit',
-  }
-  return map[type]
-}
+function WalletTab() {
+  const { data: balance, isLoading: balanceLoading } =
+    useApi<CenterWalletBalance>('/center/wallet/balance')
+  const { data: transactions, isLoading: txLoading } =
+    useApi<CenterTransaction[]>('/center/wallet/transactions?page=1&pageSize=50')
 
-function txnTypeColor(type: WalletTransaction['type']): string {
-  const map: Record<WalletTransaction['type'], string> = {
-    welcome: 'blue',
-    referral: 'purple',
-    refund: 'cyan',
-    fee_redemption: 'volcano',
-    manual_credit: 'gold',
-  }
-  return map[type]
-}
-
-// ── WalletDetailDrawer ────────────────────────────────────────────────────────
-
-interface WalletDetailDrawerProps {
-  wallet: WalletSummary | null
-  onClose: () => void
-  canManualCredit: boolean
-}
-
-function WalletDetailDrawer({ wallet, onClose, canManualCredit }: WalletDetailDrawerProps) {
-  const [creditModalOpen, setCreditModalOpen] = useState(false)
-  const [creditForm] = Form.useForm()
-  const [submitting, setSubmitting] = useState(false)
-  const { data: transactions, isLoading, mutate } = useApi<WalletTransaction[]>(
-    wallet ? `/wallet/${wallet.studentId}/transactions` : null,
-  )
-
-  const txnColumns: ColumnsType<WalletTransaction> = [
+  const txColumns: ColumnsType<CenterTransaction> = [
     {
       title: 'Date',
       dataIndex: 'createdAt',
-      width: 110,
-      render: (d: string) => formatDate(d),
-    },
-    {
-      title: 'Type',
-      dataIndex: 'type',
-      render: (t: WalletTransaction['type']) => (
-        <Tag color={txnTypeColor(t)}>{txnTypeLabel(t)}</Tag>
-      ),
-    },
-    {
-      title: 'Amount',
-      dataIndex: 'amountPaise',
-      align: 'right',
-      render: (v: number, rec) => (
-        <span className={rec.direction === 'credit' ? 'text-green-600 font-medium' : 'text-red-500 font-medium'}>
-          {rec.direction === 'credit' ? '+' : '-'}{formatMoney(v)}
-        </span>
-      ),
-    },
-    {
-      title: 'Balance After',
-      dataIndex: 'balanceAfterPaise',
-      align: 'right',
-      render: (v: number) => <span className="text-gray-600">{formatMoney(v)}</span>,
+      width: 170,
+      render: (v: string) => dayjs(v).format('DD MMM YYYY, HH:mm'),
+      sorter: (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      defaultSortOrder: 'descend',
     },
     {
       title: 'Description',
       dataIndex: 'description',
       ellipsis: true,
     },
+    {
+      title: 'Type',
+      dataIndex: 'type',
+      width: 90,
+      render: (t: 'credit' | 'debit') =>
+        t === 'credit' ? <Tag color="green">Credit</Tag> : <Tag color="red">Debit</Tag>,
+      filters: [
+        { text: 'Credit', value: 'credit' },
+        { text: 'Debit', value: 'debit' },
+      ],
+      onFilter: (value, record) => record.type === value,
+    },
+    {
+      title: 'Amount',
+      dataIndex: 'amountPaise',
+      width: 140,
+      align: 'right',
+      render: (v: number, rec) => (
+        <MoneyDisplay paise={v} variant={rec.type === 'credit' ? 'success' : 'danger'} />
+      ),
+    },
+    {
+      title: 'Balance After',
+      dataIndex: 'balanceAfterPaise',
+      width: 140,
+      align: 'right',
+      render: (v: number) => <MoneyDisplay paise={v} />,
+    },
   ]
-
-  const handleManualCredit = async () => {
-    const values = await creditForm.validateFields()
-    setSubmitting(true)
-    try {
-      await apiClient.post<ApiResponse<WalletTransaction>>('/wallet/manual-credit', {
-        studentId: wallet!.studentId,
-        amountPaise: rupeesToPaise(values.amountRupees as number),
-        reason: values.reason as string,
-      } satisfies ManualCreditPayload)
-      message.success('Credit applied successfully')
-      setCreditModalOpen(false)
-      creditForm.resetFields()
-      void mutate()
-    } catch {
-      message.error('Failed to apply credit')
-    } finally {
-      setSubmitting(false)
-    }
-  }
 
   return (
     <>
-      <Drawer
-        open={!!wallet}
-        onClose={onClose}
-        title={wallet ? `Wallet — ${wallet.studentName}` : ''}
-        width={700}
-        extra={
-          canManualCredit && (
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={() => setCreditModalOpen(true)}
-            >
-              Manual Credit
-            </Button>
-          )
-        }
-      >
-        {wallet && (
-          <Row gutter={[16, 16]} className="mb-4">
-            {[
-              { label: 'Balance', value: formatMoney(wallet.balancePaise), cls: 'text-blue-600' },
-              { label: 'Total Earned', value: formatMoney(wallet.totalEarnedPaise), cls: 'text-green-600' },
-              { label: 'Total Redeemed', value: formatMoney(wallet.totalRedeemedPaise), cls: 'text-orange-500' },
-              { label: 'Expires', value: formatDate(wallet.expiryDate), cls: 'text-gray-700' },
-            ].map((s) => (
-              <Col xs={12} sm={6} key={s.label}>
-                <div className="rounded-lg border border-gray-100 bg-gray-50 p-3 text-center">
-                  <div className="text-xs text-gray-400 mb-1">{s.label}</div>
-                  <div className={`font-bold text-sm ${s.cls}`}>{s.value}</div>
-                </div>
-              </Col>
-            ))}
-          </Row>
-        )}
+      <Row gutter={[16, 16]} className="mb-6">
+        <Col xs={24} sm={8}>
+          <Card loading={balanceLoading} className="bg-blue-50 border-blue-200">
+            <div className="text-xs text-gray-500 mb-1">Total Balance</div>
+            <div className="text-3xl font-bold text-blue-700">
+              {balance ? formatMoney(balance.totalBalancePaise) : '—'}
+            </div>
+          </Card>
+        </Col>
+        <Col xs={24} sm={8}>
+          <Card loading={balanceLoading} className="bg-green-50 border-green-200">
+            <div className="text-xs text-gray-500 mb-1">Commission Earned</div>
+            <div className="text-2xl font-semibold text-green-700">
+              {balance ? formatMoney(balance.commissionEarnedPaise) : '—'}
+            </div>
+          </Card>
+        </Col>
+        <Col xs={24} sm={8}>
+          <Card loading={balanceLoading} className="bg-orange-50 border-orange-200">
+            <div className="text-xs text-gray-500 mb-1">Pending Settlement</div>
+            <div className="text-2xl font-semibold text-orange-600">
+              {balance ? formatMoney(balance.pendingSettlementPaise) : '—'}
+            </div>
+            {balance?.lastSettledAt && (
+              <div className="text-xs text-gray-400 mt-1">
+                Last settled {dayjs(balance.lastSettledAt).format('DD MMM YYYY')}
+              </div>
+            )}
+          </Card>
+        </Col>
+      </Row>
 
-        <Table
-          dataSource={transactions ?? []}
-          columns={txnColumns}
-          rowKey="id"
-          loading={isLoading}
-          size="small"
-          pagination={{ pageSize: 20 }}
-        />
-      </Drawer>
-
-      <Modal
-        open={creditModalOpen}
-        title="Manual Credit"
-        onCancel={() => {
-          setCreditModalOpen(false)
-          creditForm.resetFields()
-        }}
-        onOk={handleManualCredit}
-        confirmLoading={submitting}
-        okText="Apply Credit"
-      >
-        <Form form={creditForm} layout="vertical" className="mt-4">
-          <Form.Item
-            name="amountRupees"
-            label="Amount (₹)"
-            rules={[
-              { required: true, message: 'Amount is required' },
-              { type: 'number', min: 1, message: 'Amount must be at least ₹1' },
-            ]}
-          >
-            <InputNumber
-              prefix="₹"
-              min={1}
-              precision={0}
-              style={{ width: '100%' }}
-              placeholder="Enter amount in rupees"
-            />
-          </Form.Item>
-          <Form.Item
-            name="reason"
-            label="Reason"
-            rules={[{ required: true, message: 'Reason is required' }]}
-          >
-            <Input.TextArea rows={3} placeholder="Why is this credit being applied?" />
-          </Form.Item>
-        </Form>
-      </Modal>
+      <Table<CenterTransaction>
+        dataSource={transactions ?? []}
+        columns={txColumns}
+        rowKey="id"
+        loading={txLoading}
+        size="middle"
+        className="bg-white rounded-lg"
+        locale={{ emptyText: 'No transactions yet.' }}
+        pagination={{ pageSize: 20, showSizeChanger: false }}
+      />
     </>
   )
 }
 
-// ── StudentWalletsTab ─────────────────────────────────────────────────────────
+// ── Promo Codes Tab ─────────────────────────────────────────────────────────
 
-function StudentWalletsTab() {
-  const [search, setSearch] = useState('')
-  const [activeSearch, setActiveSearch] = useState('')
-  const [selectedWallet, setSelectedWallet] = useState<WalletSummary | null>(null)
-  const [exporting, setExporting] = useState(false)
-  const user = useAuthStore((s) => s.user)
-  const canManualCredit = user?.role === 'center_admin'
-
-  const { data: wallets, isLoading } = useApi<WalletSummary[]>(
-    `/wallet/list${activeSearch ? `?search=${encodeURIComponent(activeSearch)}` : ''}`,
-  )
-
-  const handleSearch = () => setActiveSearch(search)
-
-  const handleExport = async () => {
-    setExporting(true)
-    try {
-      const res = await apiClient.get<Blob>('/wallet/export', { responseType: 'blob' })
-      const url = URL.createObjectURL(res.data)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'wallets.csv'
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch {
-      message.error('Export failed')
-    } finally {
-      setExporting(false)
-    }
-  }
-
-  const columns: ColumnsType<WalletSummary> = [
-    { title: 'Student', dataIndex: 'studentName', sorter: (a, b) => a.studentName.localeCompare(b.studentName) },
-    { title: 'Enrollment No.', dataIndex: 'enrollmentNumber' },
-    {
-      title: 'Balance',
-      dataIndex: 'balancePaise',
-      align: 'right',
-      render: (v: number) => <span className="font-medium text-blue-600">{formatMoney(v)}</span>,
-      sorter: (a, b) => a.balancePaise - b.balancePaise,
-    },
-    {
-      title: 'Expiry',
-      dataIndex: 'expiryDate',
-      render: (d: string) => formatDate(d),
-    },
-    {
-      title: 'Total Earned',
-      dataIndex: 'totalEarnedPaise',
-      align: 'right',
-      render: (v: number) => <span className="text-green-600">{formatMoney(v)}</span>,
-    },
-    {
-      title: 'Total Redeemed',
-      dataIndex: 'totalRedeemedPaise',
-      align: 'right',
-      render: (v: number) => <span className="text-orange-500">{formatMoney(v)}</span>,
-    },
-  ]
-
-  return (
-    <div>
-      <div className="flex gap-2 mb-4 flex-wrap items-center justify-between">
-        <div className="flex gap-2 items-center">
-          <Input
-            placeholder="Search by name or enrollment no."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onPressEnter={handleSearch}
-            style={{ width: 280 }}
-            suffix={<SearchOutlined className="text-gray-400 cursor-pointer" onClick={handleSearch} />}
-          />
-          <Button onClick={handleSearch}>Search</Button>
-        </div>
-        <Button icon={<DownloadOutlined />} loading={exporting} onClick={handleExport}>
-          Export CSV
-        </Button>
-      </div>
-
-      <Table
-        dataSource={wallets ?? []}
-        columns={columns}
-        rowKey="studentId"
-        loading={isLoading}
-        size="middle"
-        className="bg-white rounded-lg"
-        onRow={(rec) => ({ onClick: () => setSelectedWallet(rec), className: 'cursor-pointer hover:bg-blue-50' })}
-        pagination={{ pageSize: 20 }}
-      />
-
-      <WalletDetailDrawer
-        wallet={selectedWallet}
-        onClose={() => setSelectedWallet(null)}
-        canManualCredit={canManualCredit}
-      />
-    </div>
-  )
-}
-
-// ── PromoCampaignsTab ─────────────────────────────────────────────────────────
-
-function PromoCampaignsTab() {
-  const [newCampaignOpen, setNewCampaignOpen] = useState(false)
-  const [form] = Form.useForm()
+function PromoCodesTab() {
+  const [modalOpen, setModalOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const { data: campaigns, isLoading, mutate } = useApi<PromoCampaign[]>('/wallet/campaigns')
+  const [form] = Form.useForm()
+  const { data: promoCodes, isLoading, mutate } = useApi<PromoCode[]>('/center/promo-codes')
 
-  const handleToggle = async (campaign: PromoCampaign, isActive: boolean) => {
-    try {
-      await apiClient.patch(`/wallet/campaigns/${campaign.id}`, { isActive })
-      void mutate()
-    } catch {
-      message.error('Failed to update campaign')
-    }
-  }
-
-  const handleCreateCampaign = async () => {
+  const handleCreate = async () => {
     const values = await form.validateFields()
     setSubmitting(true)
     try {
-      await apiClient.post('/api/v1/wallet/campaigns', {
-        name: values.name,
-        bonusType: values.bonusType,
-        bonusAmountPaise: rupeesToPaise(values.bonusAmountRupees as number),
-        maxPerStudent: values.maxPerStudent,
-        validFrom: (values.validRange[0] as dayjs.Dayjs).format('YYYY-MM-DD'),
-        validTo: (values.validRange[1] as dayjs.Dayjs).format('YYYY-MM-DD'),
-        redemptionCap: values.redemptionCap,
-      } satisfies CreateCampaignPayload)
-      message.success('Campaign created')
-      setNewCampaignOpen(false)
+      await apiClient.post<ApiResponse<PromoCode>>('/center/promo-codes', {
+        code: (values.code as string).toUpperCase().trim(),
+        discountPercent: values.discountPercent as number,
+        validFrom: (values.validFrom as dayjs.Dayjs).format('YYYY-MM-DD'),
+        validTo: (values.validTo as dayjs.Dayjs).format('YYYY-MM-DD'),
+        maxUses: values.maxUses as number,
+      } satisfies CreatePromoCodePayload)
+      message.success('Promo code created')
+      setModalOpen(false)
       form.resetFields()
       void mutate()
     } catch {
-      message.error('Failed to create campaign')
+      message.error('Failed to create promo code')
     } finally {
       setSubmitting(false)
     }
   }
 
-  const columns: ColumnsType<PromoCampaign> = [
-    { title: 'Campaign Name', dataIndex: 'name', render: (n: string) => <span className="font-medium">{n}</span> },
+  const handleDelete = async (id: string) => {
+    try {
+      await apiClient.delete<ApiResponse<null>>(`/center/promo-codes/${id}`)
+      message.success('Promo code deleted')
+      void mutate()
+    } catch {
+      message.error('Failed to delete promo code')
+    }
+  }
+
+  const columns: ColumnsType<PromoCode> = [
     {
-      title: 'Type',
-      dataIndex: 'bonusType',
-      render: (t: PromoCampaign['bonusType']) => {
-        const map: Record<PromoCampaign['bonusType'], string> = {
-          welcome: 'Welcome',
-          referral: 'Referral',
-          manual: 'Manual',
-        }
-        const colors: Record<PromoCampaign['bonusType'], string> = {
-          welcome: 'green',
-          referral: 'blue',
-          manual: 'gold',
-        }
-        return <Tag color={colors[t]}>{map[t]}</Tag>
+      title: 'Code',
+      dataIndex: 'code',
+      render: (c: string) => (
+        <span className="font-mono font-semibold tracking-wider">{c}</span>
+      ),
+    },
+    {
+      title: 'Discount',
+      dataIndex: 'discountPercent',
+      width: 100,
+      render: (v: number) => <Tag color="blue">{v}%</Tag>,
+    },
+    {
+      title: 'Valid From',
+      dataIndex: 'validFrom',
+      width: 130,
+      render: (v: string) => dayjs(v).format('DD MMM YYYY'),
+    },
+    {
+      title: 'Valid To',
+      dataIndex: 'validTo',
+      width: 130,
+      render: (v: string) => {
+        const expired = dayjs(v).isBefore(dayjs(), 'day')
+        return (
+          <span className={expired ? 'text-red-500' : ''}>
+            {dayjs(v).format('DD MMM YYYY')}
+          </span>
+        )
       },
     },
     {
-      title: 'Bonus Amount',
-      dataIndex: 'bonusAmountPaise',
-      align: 'right',
-      render: (v: number) => formatMoney(v),
+      title: 'Uses',
+      width: 110,
+      render: (_: unknown, rec: PromoCode) => (
+        <span>
+          {rec.useCount}
+          <span className="text-gray-400"> / {rec.maxUses}</span>
+        </span>
+      ),
     },
     {
-      title: 'Validity',
-      render: (_: unknown, rec: PromoCampaign) => `${formatDate(rec.validFrom)} – ${formatDate(rec.validTo)}`,
+      title: 'Status',
+      width: 100,
+      render: (_: unknown, rec: PromoCode) => {
+        const expired = dayjs(rec.validTo).isBefore(dayjs(), 'day')
+        const exhausted = rec.useCount >= rec.maxUses
+        if (!rec.isActive || expired) return <Tag color="default">Inactive</Tag>
+        if (exhausted) return <Tag color="orange">Exhausted</Tag>
+        return <Tag color="green">Active</Tag>
+      },
     },
     {
-      title: 'Redemptions',
-      render: (_: unknown, rec: PromoCampaign) => `${rec.redeemedCount} / ${rec.redemptionCap}`,
-    },
-    {
-      title: 'Active',
-      dataIndex: 'isActive',
-      render: (v: boolean, rec: PromoCampaign) => (
-        <Switch checked={v} onChange={(checked) => handleToggle(rec, checked)} />
+      title: '',
+      width: 60,
+      align: 'center',
+      render: (_: unknown, rec: PromoCode) => (
+        <Popconfirm
+          title="Delete promo code?"
+          description="This action cannot be undone."
+          onConfirm={() => handleDelete(rec.id)}
+          okText="Delete"
+          okButtonProps={{ danger: true }}
+        >
+          <Button
+            type="text"
+            danger
+            icon={<DeleteOutlined />}
+            size="small"
+          />
+        </Popconfirm>
       ),
     },
   ]
@@ -412,80 +251,110 @@ function PromoCampaignsTab() {
   return (
     <div>
       <div className="flex justify-end mb-4">
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setNewCampaignOpen(true)}>
-          New Campaign
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={() => setModalOpen(true)}
+        >
+          Create Promo Code
         </Button>
       </div>
 
-      <Table
-        dataSource={campaigns ?? []}
+      <Table<PromoCode>
+        dataSource={promoCodes ?? []}
         columns={columns}
         rowKey="id"
         loading={isLoading}
         size="middle"
         className="bg-white rounded-lg"
-        pagination={false}
+        locale={{ emptyText: 'No promo codes yet. Create one above.' }}
+        pagination={{ pageSize: 20, showSizeChanger: false }}
       />
 
       <Modal
-        open={newCampaignOpen}
-        title="New Promo Campaign"
+        open={modalOpen}
+        title="Create Promo Code"
         onCancel={() => {
-          setNewCampaignOpen(false)
+          setModalOpen(false)
           form.resetFields()
         }}
-        onOk={handleCreateCampaign}
+        onOk={handleCreate}
         confirmLoading={submitting}
-        okText="Create Campaign"
-        width={520}
+        okText="Create"
+        width={480}
+        destroyOnClose
       >
         <Form form={form} layout="vertical" className="mt-4">
-          <Form.Item name="name" label="Campaign Name" rules={[{ required: true, message: 'Name is required' }]}>
-            <Input placeholder="e.g. Summer Welcome Bonus" />
-          </Form.Item>
-          <Form.Item name="bonusType" label="Bonus Type" rules={[{ required: true, message: 'Select a type' }]}>
-            <Select
-              placeholder="Select bonus type"
-              options={[
-                { value: 'welcome', label: 'Welcome (auto on enrollment)' },
-                { value: 'referral', label: 'Referral Reward' },
-                { value: 'manual', label: 'Manual' },
-              ]}
+          <Form.Item
+            name="code"
+            label="Code"
+            rules={[
+              { required: true, message: 'Code is required' },
+              { pattern: /^[A-Za-z0-9_-]+$/, message: 'Letters, numbers, - and _ only' },
+              { min: 3, message: 'At least 3 characters' },
+              { max: 20, message: 'At most 20 characters' },
+            ]}
+          >
+            <Input
+              placeholder="e.g. SUMMER25"
+              style={{ textTransform: 'uppercase' }}
+              maxLength={20}
             />
           </Form.Item>
+
+          <Form.Item
+            name="discountPercent"
+            label="Discount (%)"
+            rules={[
+              { required: true, message: 'Discount is required' },
+              { type: 'number', min: 1, max: 100, message: 'Must be between 1 and 100' },
+            ]}
+          >
+            <InputNumber
+              min={1}
+              max={100}
+              precision={0}
+              suffix="%"
+              style={{ width: '100%' }}
+              placeholder="e.g. 10"
+            />
+          </Form.Item>
+
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item
-                name="bonusAmountRupees"
-                label="Bonus Amount (₹)"
-                rules={[{ required: true, message: 'Amount required' }, { type: 'number', min: 1 }]}
+                name="validFrom"
+                label="Valid From"
+                rules={[{ required: true, message: 'Required' }]}
               >
-                <InputNumber prefix="₹" min={1} precision={0} style={{ width: '100%' }} />
+                <DatePicker style={{ width: '100%' }} disabledDate={(d) => d.isAfter(form.getFieldValue('validTo'))} />
               </Form.Item>
             </Col>
             <Col span={12}>
               <Form.Item
-                name="maxPerStudent"
-                label="Max Per Student"
-                rules={[{ required: true, message: 'Required' }, { type: 'number', min: 1 }]}
+                name="validTo"
+                label="Valid To"
+                rules={[{ required: true, message: 'Required' }]}
               >
-                <InputNumber min={1} precision={0} style={{ width: '100%' }} />
+                <DatePicker style={{ width: '100%' }} disabledDate={(d) => d.isBefore(form.getFieldValue('validFrom'))} />
               </Form.Item>
             </Col>
           </Row>
+
           <Form.Item
-            name="redemptionCap"
-            label="Total Redemption Cap"
-            rules={[{ required: true, message: 'Required' }, { type: 'number', min: 1 }]}
+            name="maxUses"
+            label="Max Uses"
+            rules={[
+              { required: true, message: 'Max uses is required' },
+              { type: 'number', min: 1, message: 'At least 1' },
+            ]}
           >
-            <InputNumber min={1} precision={0} style={{ width: '100%' }} placeholder="Max total redemptions" />
-          </Form.Item>
-          <Form.Item
-            name="validRange"
-            label="Valid From / To"
-            rules={[{ required: true, message: 'Select date range' }]}
-          >
-            <DatePicker.RangePicker style={{ width: '100%' }} />
+            <InputNumber
+              min={1}
+              precision={0}
+              style={{ width: '100%' }}
+              placeholder="e.g. 100"
+            />
           </Form.Item>
         </Form>
       </Modal>
@@ -493,35 +362,36 @@ function PromoCampaignsTab() {
   )
 }
 
-// ── Main WalletPage ───────────────────────────────────────────────────────────
+// ── Main WalletPage ─────────────────────────────────────────────────────────
 
 export function WalletPage() {
   return (
     <div>
-      <PageHeader title="Wallet & Promos" subtitle="Student wallet balances and promotional campaigns" />
-      <Card className="mt-0">
+      <PageHeader
+        title="Wallet & Promos"
+        subtitle="Center commission balance and promotional discount codes"
+      />
+      <Card>
         <Tabs
-          defaultActiveKey="wallets"
+          defaultActiveKey="wallet"
           items={[
             {
-              key: 'wallets',
+              key: 'wallet',
               label: (
                 <span>
-                  <CheckCircleOutlined /> Student Wallets
+                  <WalletOutlined /> Wallet
                 </span>
               ),
-              children: <StudentWalletsTab />,
+              children: <WalletTab />,
             },
             {
-              key: 'campaigns',
+              key: 'promo-codes',
               label: (
                 <span>
-                  <Badge dot offset={[4, 0]}>
-                    Promo Campaigns
-                  </Badge>
+                  <TagsOutlined /> Promo Codes
                 </span>
               ),
-              children: <PromoCampaignsTab />,
+              children: <PromoCodesTab />,
             },
           ]}
         />

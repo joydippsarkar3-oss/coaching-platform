@@ -69,7 +69,7 @@ export function EnquiryForm({
 
   if (status === "success") {
     return (
-      <div className="rounded-xl bg-success-50 border border-success-500/30 p-6 text-center">
+      <div role="status" className="rounded-xl bg-success-50 border border-success-500/30 p-6 text-center">
         <p className="font-semibold text-success-700">{t("success")}</p>
       </div>
     );

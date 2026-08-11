@@ -27,6 +27,9 @@ import { ContentItemsModule } from './modules/content-items/content-items.module
 import { ExpensesModule } from './modules/expenses/expenses.module';
 import { TicketsModule } from './modules/tickets/tickets.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { CrmModule } from './modules/crm/crm.module';
+import { PlacementsModule } from './modules/placements/placements.module';
 
 @Module({
   imports: [
@@ -81,6 +84,9 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     ExpensesModule,
     TicketsModule,
     WebhooksModule,
+    PlacementsModule,
+    AnalyticsModule,
+    CrmModule,
   ],
 })
 export class AppModule implements NestModule {

@@ -337,7 +337,7 @@ export function TypingPractice({
             {formatTime(timeLeft)}
           </span>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4" aria-live="polite" aria-atomic="true">
           <div className="text-center">
             <p className="text-xs text-gray-400">WPM</p>
             <p className="font-mono font-semibold text-brand-700">{liveStats.grossWpm}</p>

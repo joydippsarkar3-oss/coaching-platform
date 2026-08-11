@@ -25,7 +25,7 @@ export function HeroSection() {
           {/* Text */}
           <div className="text-center lg:text-left">
             <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-1.5 text-sm font-medium backdrop-blur-sm">
-              <ShieldCheck className="size-4 text-green-300" />
+              <ShieldCheck className="size-4 text-green-300" aria-hidden="true" />
               {t("badge")}
             </div>
 
@@ -40,7 +40,7 @@ export function HeroSection() {
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center lg:justify-start">
               <Button asChild size="lg" variant="secondary">
                 <Link href="/courses">
-                  {t("ctaPrimary")} <ArrowRight className="size-5" />
+                  {t("ctaPrimary")} <ArrowRight className="size-5" aria-hidden="true" />
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline" className="border-white text-white hover:bg-white/10">
@@ -57,7 +57,10 @@ export function HeroSection() {
           </div>
 
           {/* Hero image placeholder */}
-          <div className="relative mx-auto aspect-[4/3] w-full max-w-lg overflow-hidden rounded-2xl bg-brand-700/50 shadow-2xl lg:mx-0">
+          <div
+            className="relative mx-auto aspect-[4/3] w-full max-w-lg overflow-hidden rounded-2xl bg-brand-700/50 shadow-2xl lg:mx-0"
+            aria-hidden="true"
+          >
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-brand-300">
               {/* Replace with actual hero photograph */}
               <div className="size-16 rounded-full bg-brand-600" />

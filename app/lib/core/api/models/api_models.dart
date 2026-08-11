@@ -528,6 +528,168 @@ class HomeworkAssignment {
       );
 }
 
+// ── Schedule ──────────────────────────────────────────────────────────────────
+
+@immutable
+class ScheduleEntry {
+  const ScheduleEntry({
+    required this.id,
+    required this.batchName,
+    required this.courseTitle,
+    required this.dayOfWeek, // 1=Mon … 5=Fri
+    required this.startTime, // "HH:mm"
+    required this.endTime,   // "HH:mm"
+    required this.room,
+    required this.studentCount,
+    required this.attendanceStatus, // "pending" | "taken" | "cancelled"
+  });
+
+  final String id;
+  final String batchName;
+  final String courseTitle;
+  final int dayOfWeek;
+  final String startTime;
+  final String endTime;
+  final String room;
+  final int studentCount;
+  final String attendanceStatus;
+
+  factory ScheduleEntry.fromJson(Map<String, dynamic> json) => ScheduleEntry(
+        id: json['id'] as String,
+        batchName: json['batch_name'] as String,
+        courseTitle: json['course_title'] as String,
+        dayOfWeek: json['day_of_week'] as int,
+        startTime: json['start_time'] as String,
+        endTime: json['end_time'] as String,
+        room: json['room'] as String? ?? '',
+        studentCount: json['student_count'] as int? ?? 0,
+        attendanceStatus: json['attendance_status'] as String? ?? 'pending',
+      );
+}
+
+// ── TeacherProfile ────────────────────────────────────────────────────────────
+
+@immutable
+class TeacherProfile {
+  const TeacherProfile({
+    required this.id,
+    required this.name,
+    required this.phone,
+    required this.qualification,
+    required this.joiningDate,
+    required this.totalStudents,
+    required this.totalBatches,
+    required this.certificatesIssued,
+    required this.subjectsTaught,
+    this.avatarUrl,
+    this.bio,
+  });
+
+  final String id;
+  final String name;
+  final String phone;
+  final String qualification;
+  final DateTime joiningDate;
+  final int totalStudents;
+  final int totalBatches;
+  final int certificatesIssued;
+  final List<String> subjectsTaught;
+  final String? avatarUrl;
+  final String? bio;
+
+  factory TeacherProfile.fromJson(Map<String, dynamic> json) => TeacherProfile(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        phone: json['phone'] as String,
+        qualification: json['qualification'] as String? ?? '',
+        joiningDate: DateTime.parse(json['joining_date'] as String),
+        totalStudents: json['total_students'] as int? ?? 0,
+        totalBatches: json['total_batches'] as int? ?? 0,
+        certificatesIssued: json['certificates_issued'] as int? ?? 0,
+        subjectsTaught:
+            List<String>.from(json['subjects_taught'] as List? ?? []),
+        avatarUrl: json['avatar_url'] as String?,
+        bio: json['bio'] as String?,
+      );
+}
+
+// ── Placement ─────────────────────────────────────────────────────────────────
+
+@immutable
+class JobListing {
+  const JobListing({
+    required this.id,
+    required this.title,
+    required this.employerName,
+    required this.location,
+    required this.skills,
+    required this.openings,
+    required this.postedAt,
+    this.salaryMinPaise,
+    this.salaryMaxPaise,
+    this.description,
+    this.expiresAt,
+  });
+
+  final String id;
+  final String title;
+  final String employerName;
+  final String location;
+  final List<String> skills;
+  final int openings;
+  final DateTime postedAt;
+  final int? salaryMinPaise;
+  final int? salaryMaxPaise;
+  final String? description;
+  final DateTime? expiresAt;
+
+  bool get isExpired => expiresAt != null && expiresAt!.isBefore(DateTime.now());
+
+  factory JobListing.fromJson(Map<String, dynamic> json) => JobListing(
+        id: json['id'] as String,
+        title: json['title'] as String,
+        employerName: json['employer_name'] as String,
+        location: json['location'] as String? ?? '',
+        skills: List<String>.from(json['skills'] as List? ?? []),
+        openings: json['openings'] as int? ?? 1,
+        postedAt: DateTime.parse(json['posted_at'] as String),
+        salaryMinPaise: json['salary_min_paise'] as int?,
+        salaryMaxPaise: json['salary_max_paise'] as int?,
+        description: json['description'] as String?,
+        expiresAt: json['expires_at'] != null
+            ? DateTime.parse(json['expires_at'] as String)
+            : null,
+      );
+}
+
+@immutable
+class JobApplication {
+  const JobApplication({
+    required this.id,
+    required this.jobId,
+    required this.jobTitle,
+    required this.employerName,
+    required this.status,
+    required this.appliedAt,
+  });
+
+  final String id;
+  final String jobId;
+  final String jobTitle;
+  final String employerName;
+  final String status; // APPLIED | SHORTLISTED | INTERVIEW | PLACED | REJECTED
+  final DateTime appliedAt;
+
+  factory JobApplication.fromJson(Map<String, dynamic> json) => JobApplication(
+        id: json['id'] as String,
+        jobId: json['job_id'] as String,
+        jobTitle: json['job_title'] as String,
+        employerName: json['employer_name'] as String,
+        status: json['status'] as String,
+        appliedAt: DateTime.parse(json['applied_at'] as String),
+      );
+}
+
 // ── Payment ───────────────────────────────────────────────────────────────────
 
 @immutable

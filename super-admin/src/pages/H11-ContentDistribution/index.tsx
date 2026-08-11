@@ -1,236 +1,120 @@
 import React, { useState } from 'react';
 import {
-  Tabs, Tree, Table, Tag, Button, Drawer, Form, Input, Select, Upload,
-  message, Space, Typography, Card, Row, Col, Badge,
+  Tabs, Table, Tag, Button, Modal, Form, Input, Select, Upload, Radio,
+  message, Space, Typography, Card, Row, Col, Badge, Spin,
 } from 'antd';
 import {
-  PlusOutlined, UploadOutlined, ReloadOutlined, FolderOutlined, FileOutlined,
+  PlusOutlined, FilePdfOutlined, VideoCameraOutlined, LinkOutlined,
+  InboxOutlined, SendOutlined,
+  CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import type { DataNode } from 'antd/es/tree';
-import { usePollingApi } from '@/hooks/usePollingApi';
+import type { UploadFile } from 'antd/es/upload/interface';
 import { useApi } from '@/hooks/useApi';
+import { usePollingApi } from '@/hooks/usePollingApi';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { formatDate } from '@/utils/dates';
 import apiClient from '@/api/client';
 
 const { TabPane } = Tabs;
+const { Dragger } = Upload;
+const { Text } = Typography;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type MaterialType = 'PDF' | 'VIDEO' | 'QUIZ';
-type DistJobStatus = 'QUEUED' | 'DISTRIBUTING' | 'DONE' | 'FAILED';
-type AssetTag = string;
+type MaterialType = 'PDF' | 'VIDEO' | 'LINK';
+type DistStatus = 'Delivered' | 'Pending' | 'Failed';
 
-interface CourseUnit {
-  id: string;
-  title: string;
-  order: number;
-}
-
-interface CourseTree {
+interface Course {
   id: string;
   name: string;
-  units: CourseUnit[];
 }
 
-interface ContentMaterial {
+interface ContentItem {
   id: string;
-  title: string;
+  name: string;
   type: MaterialType;
-  unitId: string;
+  courseId: string;
+  courseName: string;
   uploadedAt: string;
-  centersReceiving: number;
-  version: number;
+  size?: number;
   url?: string;
 }
 
-interface DistributionJob {
-  id: string;
-  courseName: string;
-  materialCount: number;
-  centerCount: number;
-  status: DistJobStatus;
-  createdAt: string;
-}
-
-interface MarketingAsset {
-  id: string;
-  title: string;
-  type: 'IMAGE' | 'PDF';
-  tags: AssetTag[];
-  uploadedAt: string;
-  url: string;
-  thumbnailUrl?: string;
-}
-
-interface CenterBasic {
-  id: string;
-  name: string;
+interface CenterDistribution {
+  centerId: string;
+  centerName: string;
+  city?: string;
+  status: DistStatus;
+  distributedAt?: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const MATERIAL_TYPE_COLOR: Record<MaterialType, string> = {
-  PDF: 'blue',
+const TYPE_ICON: Record<MaterialType, React.ReactNode> = {
+  PDF: <FilePdfOutlined style={{ color: '#ef4444' }} />,
+  VIDEO: <VideoCameraOutlined style={{ color: '#8b5cf6' }} />,
+  LINK: <LinkOutlined style={{ color: '#2563eb' }} />,
+};
+
+const TYPE_COLOR: Record<MaterialType, string> = {
+  PDF: 'red',
   VIDEO: 'purple',
-  QUIZ: 'orange',
+  LINK: 'blue',
 };
 
-const JOB_STATUS_COLOR: Record<DistJobStatus, string> = {
-  QUEUED: 'default',
-  DISTRIBUTING: 'processing',
-  DONE: 'success',
-  FAILED: 'error',
+const DIST_STATUS_COLOR: Record<DistStatus, Parameters<typeof Badge>[0]['status']> = {
+  Delivered: 'success',
+  Pending: 'processing',
+  Failed: 'error',
 };
 
-// ─── Upload Material Drawer ───────────────────────────────────────────────────
+const DIST_STATUS_ICON: Record<DistStatus, React.ReactNode> = {
+  Delivered: <CheckCircleOutlined style={{ color: '#22c55e' }} />,
+  Pending: <ClockCircleOutlined style={{ color: '#3b82f6' }} />,
+  Failed: <CloseCircleOutlined style={{ color: '#ef4444' }} />,
+};
 
-interface UploadDrawerProps {
-  open: boolean;
-  onClose: () => void;
-  onCreated: () => void;
-  courses: CourseTree[];
-  centers: CenterBasic[];
+function formatFileSize(bytes?: number): string {
+  if (!bytes) return '-';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function UploadMaterialDrawer({ open, onClose, onCreated, courses, centers }: UploadDrawerProps) {
-  const [form] = Form.useForm();
-  const [loading, setLoading] = useState(false);
-  const [selectedCourse, setSelectedCourse] = useState<string>('');
-  const [materialType, setMaterialType] = useState<MaterialType>('PDF');
+// ─── Content Library Tab ─────────────────────────────────────────────────────
 
-  const selectedUnits = courses.find((c) => c.id === selectedCourse)?.units ?? [];
-
-  const handleSubmit = async (values: Record<string, unknown>) => {
-    setLoading(true);
-    try {
-      const formData = new FormData();
-      Object.entries(values).forEach(([k, v]) => {
-        if (k === 'file') {
-          const fileList = v as { file: File }[];
-          if (fileList?.[0]?.file) formData.append('file', fileList[0].file);
-        } else if (Array.isArray(v)) {
-          formData.append(k, JSON.stringify(v));
-        } else if (v != null) {
-          formData.append(k, String(v));
-        }
-      });
-      await apiClient.post('/api/v1/content-items', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      message.success('Material uploaded and queued for distribution');
-      form.resetFields();
-      onCreated();
-      onClose();
-    } catch {
-      message.error('Upload failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <Drawer title="Upload Material" open={open} onClose={onClose} width={520}>
-      <Form form={form} layout="vertical" onFinish={handleSubmit}>
-        <Form.Item name="title" label="Title" rules={[{ required: true }]}>
-          <Input />
-        </Form.Item>
-        <Row gutter={12}>
-          <Col span={12}>
-            <Form.Item name="type" label="Type" rules={[{ required: true }]} initialValue="PDF">
-              <Select onChange={(v) => setMaterialType(v as MaterialType)}>
-                <Select.Option value="PDF">PDF</Select.Option>
-                <Select.Option value="VIDEO">Video</Select.Option>
-                <Select.Option value="QUIZ">Quiz</Select.Option>
-              </Select>
-            </Form.Item>
-          </Col>
-          <Col span={12}>
-            <Form.Item name="courseId" label="Course" rules={[{ required: true }]}>
-              <Select onChange={(v) => setSelectedCourse(String(v))}>
-                {courses.map((c) => (
-                  <Select.Option key={c.id} value={c.id}>{c.name}</Select.Option>
-                ))}
-              </Select>
-            </Form.Item>
-          </Col>
-        </Row>
-        <Form.Item name="unitId" label="Unit" rules={[{ required: true }]}>
-          <Select disabled={!selectedCourse}>
-            {selectedUnits.map((u) => (
-              <Select.Option key={u.id} value={u.id}>{u.title}</Select.Option>
-            ))}
-          </Select>
-        </Form.Item>
-        {materialType === 'PDF' ? (
-          <Form.Item name="file" label="PDF File" rules={[{ required: true }]}>
-            <Upload accept=".pdf" beforeUpload={() => false} maxCount={1}>
-              <Button icon={<UploadOutlined />}>Select PDF</Button>
-            </Upload>
-          </Form.Item>
-        ) : (
-          <Form.Item name="url" label="Video URL" rules={[{ required: true }]}>
-            <Input placeholder="https://..." />
-          </Form.Item>
-        )}
-        <Form.Item name="changelog" label="Changelog Note">
-          <Input.TextArea rows={2} placeholder="What changed from the previous version?" />
-        </Form.Item>
-        <Form.Item name="centerIds" label="Push to Centers">
-          <Select
-            mode="multiple"
-            placeholder="Default: all centers offering this course"
-            allowClear
-          >
-            {centers.map((c) => (
-              <Select.Option key={c.id} value={c.id}>{c.name}</Select.Option>
-            ))}
-          </Select>
-        </Form.Item>
-        <Button type="primary" htmlType="submit" loading={loading} block>
-          Upload &amp; Push to Centers
-        </Button>
-      </Form>
-    </Drawer>
-  );
-}
-
-// ─── Material Library Tab ─────────────────────────────────────────────────────
-
-function MaterialLibraryTab() {
-  const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
+function ContentLibraryTab({ onSelectForDistribution }: { onSelectForDistribution: (item: ContentItem) => void }) {
   const [uploadOpen, setUploadOpen] = useState(false);
 
-  const { data: courses = [], mutate: mutateCourses } = usePollingApi<CourseTree[]>(
-    '/api/v1/courses?withUnits=true', 60_000
-  );
-  const { data: centers = [] } = useApi<CenterBasic[]>('/api/v1/centers?minimal=true');
-  const { data: materials = [], mutate: mutateMaterials } = useApi<ContentMaterial[]>(
-    selectedUnitId ? `/api/v1/content-items?unitId=${selectedUnitId}` : null
+  const { data: courses = [] } = useApi<Course[]>('/api/v1/courses');
+  const { data: items = [], loading, mutate } = usePollingApi<ContentItem[]>(
+    '/api/v1/content-items', 60_000
   );
 
-  const treeData: DataNode[] = courses.map((course) => ({
-    key: `course-${course.id}`,
-    title: <Typography.Text strong>{course.name}</Typography.Text>,
-    icon: <FolderOutlined />,
-    selectable: false,
-    children: course.units.map((unit) => ({
-      key: unit.id,
-      title: unit.title,
-      icon: <FileOutlined />,
-      isLeaf: true,
-    })),
-  }));
-
-  const columns: ColumnsType<ContentMaterial> = [
-    { title: 'Title', dataIndex: 'title', key: 'title' },
+  const columns: ColumnsType<ContentItem> = [
+    {
+      title: 'Name',
+      dataIndex: 'name',
+      key: 'name',
+      render: (v: string, r: ContentItem) => (
+        <Space>
+          {TYPE_ICON[r.type]}
+          <Text>{v}</Text>
+        </Space>
+      ),
+    },
     {
       title: 'Type',
       dataIndex: 'type',
       key: 'type',
       width: 80,
-      render: (v: MaterialType) => <Tag color={MATERIAL_TYPE_COLOR[v]}>{v}</Tag>,
+      render: (v: MaterialType) => <Tag color={TYPE_COLOR[v]}>{v}</Tag>,
+    },
+    {
+      title: 'Course',
+      dataIndex: 'courseName',
+      key: 'courseName',
     },
     {
       title: 'Uploaded',
@@ -240,277 +124,358 @@ function MaterialLibraryTab() {
       render: (v: string) => formatDate(v),
     },
     {
-      title: 'Centers',
-      dataIndex: 'centersReceiving',
-      key: 'centersReceiving',
+      title: 'Size',
+      dataIndex: 'size',
+      key: 'size',
       width: 90,
-      render: (v: number) => <Badge count={v} showZero color="blue" />,
+      render: (v?: number) => <Text type="secondary">{formatFileSize(v)}</Text>,
     },
     {
-      title: 'Version',
-      dataIndex: 'version',
-      key: 'version',
-      width: 80,
-      render: (v: number) => <Tag>v{v}</Tag>,
+      title: '',
+      key: 'action',
+      width: 140,
+      render: (_v, r) => (
+        <Button
+          size="small"
+          type="link"
+          icon={<SendOutlined />}
+          onClick={() => onSelectForDistribution(r)}
+        >
+          Distribute
+        </Button>
+      ),
     },
   ];
 
   return (
-    <Row gutter={16} style={{ minHeight: 400 }}>
-      <Col xs={24} md={6}>
-        <Card size="small" title="Courses" style={{ minHeight: 400 }}>
-          {courses.length > 0 ? (
-            <Tree
-              treeData={treeData}
-              defaultExpandAll
-              showIcon
-              onSelect={(keys) => {
-                const key = keys[0] as string;
-                if (key && !key.startsWith('course-')) setSelectedUnitId(key);
-              }}
-            />
-          ) : (
-            <Typography.Text type="secondary">No courses.</Typography.Text>
-          )}
-        </Card>
-      </Col>
-      <Col xs={24} md={18}>
-        <Card
+    <Card
+      title="Content Library"
+      extra={
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setUploadOpen(true)}>
+          Upload Material
+        </Button>
+      }
+    >
+      <Spin spinning={loading}>
+        <Table<ContentItem>
+          dataSource={items}
+          columns={columns}
+          rowKey="id"
           size="small"
-          title={selectedUnitId ? 'Materials' : 'Select a unit'}
-          extra={
-            <Button
-              type="primary"
-              size="small"
-              icon={<PlusOutlined />}
-              onClick={() => setUploadOpen(true)}
-            >
-              Upload Material
-            </Button>
-          }
-        >
-          <Table<ContentMaterial>
-            dataSource={materials}
-            columns={columns}
-            rowKey="id"
-            size="small"
-            pagination={{ pageSize: 10 }}
-            locale={{ emptyText: selectedUnitId ? 'No materials for this unit.' : 'Select a unit from the left.' }}
-          />
-        </Card>
-      </Col>
+          pagination={{ pageSize: 10 }}
+          locale={{ emptyText: 'No materials yet. Upload your first one.' }}
+        />
+      </Spin>
 
-      <UploadMaterialDrawer
+      <UploadMaterialModal
         open={uploadOpen}
         onClose={() => setUploadOpen(false)}
-        onCreated={() => { mutateMaterials(); mutateCourses(); }}
+        onCreated={mutate}
         courses={courses}
-        centers={centers}
       />
-    </Row>
+    </Card>
   );
 }
 
-// ─── Distribution Jobs Panel ──────────────────────────────────────────────────
+// ─── Distribution Tab ─────────────────────────────────────────────────────────
 
-function DistributionJobsPanel() {
-  const { data: jobs = [], mutate } = usePollingApi<DistributionJob[]>(
-    '/api/v1/content-distribution-jobs', 30_000
-  );
+function DistributionTab({ preselected }: { preselected: ContentItem | null }) {
+  const [selectedItem, setSelectedItem] = useState<ContentItem | null>(preselected);
+  const [selectedCenterIds, setSelectedCenterIds] = useState<string[]>([]);
+  const [pushing, setPushing] = useState(false);
 
-  const handleRepush = async (jobId: string) => {
+  // Sync when parent passes a preselected item (from "Distribute" click in library)
+  React.useEffect(() => {
+    if (preselected) {
+      setSelectedItem(preselected);
+      setSelectedCenterIds([]);
+    }
+  }, [preselected]);
+
+  const { data: items = [] } = useApi<ContentItem[]>('/api/v1/content-items');
+  const { data: centerDist = [], loading: distLoading, mutate: mutateDistribution } =
+    useApi<CenterDistribution[]>(
+      selectedItem ? `/api/v1/content-items/${selectedItem.id}/distribution` : null
+    );
+
+  const handlePush = async () => {
+    if (!selectedItem || selectedCenterIds.length === 0) return;
+    setPushing(true);
     try {
-      await apiClient.post(`/api/v1/content-distribution-jobs/${jobId}/repush`);
-      message.success('Re-push queued');
-      mutate();
+      await apiClient.post(`/api/v1/content-items/${selectedItem.id}/push`, {
+        centerIds: selectedCenterIds,
+      });
+      message.success(`Pushed to ${selectedCenterIds.length} center(s)`);
+      setSelectedCenterIds([]);
+      mutateDistribution();
     } catch {
-      message.error('Re-push failed');
+      message.error('Push failed. Please try again.');
+    } finally {
+      setPushing(false);
     }
   };
 
-  const columns: ColumnsType<DistributionJob> = [
-    { title: 'Course', dataIndex: 'courseName', key: 'courseName' },
+  const distColumns: ColumnsType<CenterDistribution> = [
     {
-      title: 'Materials',
-      dataIndex: 'materialCount',
-      key: 'materialCount',
-      width: 90,
+      title: 'Center',
+      dataIndex: 'centerName',
+      key: 'centerName',
     },
     {
-      title: 'Centers',
-      dataIndex: 'centerCount',
-      key: 'centerCount',
-      width: 80,
-      render: (v: number) => `${v} centers`,
+      title: 'City',
+      dataIndex: 'city',
+      key: 'city',
+      width: 120,
+      render: (v?: string) => v ?? '-',
     },
     {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
       width: 120,
-      render: (v: DistJobStatus) => <Badge status={JOB_STATUS_COLOR[v] as Parameters<typeof Badge>[0]['status']} text={v} />,
+      render: (v: DistStatus) => (
+        <Space>
+          {DIST_STATUS_ICON[v]}
+          <Badge status={DIST_STATUS_COLOR[v]} text={v} />
+        </Space>
+      ),
     },
     {
-      title: 'Queued',
-      dataIndex: 'createdAt',
-      key: 'createdAt',
-      width: 110,
-      render: (v: string) => formatDate(v),
-    },
-    {
-      title: '',
-      key: 'action',
-      width: 90,
-      render: (_v, r) =>
-        r.status === 'FAILED' ? (
-          <Button
-            size="small"
-            icon={<ReloadOutlined />}
-            onClick={() => handleRepush(r.id)}
-          >
-            Re-push
-          </Button>
-        ) : null,
+      title: 'Distributed At',
+      dataIndex: 'distributedAt',
+      key: 'distributedAt',
+      width: 130,
+      render: (v?: string) => (v ? formatDate(v) : '-'),
     },
   ];
 
-  return (
-    <Card size="small" title="Distribution Jobs" className="mt-4">
-      <Table<DistributionJob>
-        dataSource={jobs}
-        columns={columns}
-        rowKey="id"
-        size="small"
-        pagination={{ pageSize: 8 }}
-      />
-    </Card>
-  );
-}
-
-// ─── Marketing Assets Tab ─────────────────────────────────────────────────────
-
-function MarketingAssetsTab() {
-  const [uploadOpen, setUploadOpen] = useState(false);
-  const [form] = Form.useForm();
-  const [uploading, setUploading] = useState(false);
-
-  const { data: assets = [], mutate } = usePollingApi<MarketingAsset[]>(
-    '/api/v1/marketing-assets', 60_000
-  );
-
-  const handleUpload = async (values: Record<string, unknown>) => {
-    setUploading(true);
-    try {
-      const formData = new FormData();
-      const fileList = values.file as { file: File }[];
-      if (fileList?.[0]?.file) formData.append('file', fileList[0].file);
-      formData.append('title', String(values.title));
-      if (Array.isArray(values.tags)) {
-        formData.append('tags', JSON.stringify(values.tags));
-      }
-      await apiClient.post('/api/v1/marketing-assets', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      message.success('Asset uploaded');
-      form.resetFields();
-      setUploadOpen(false);
-      mutate();
-    } catch {
-      message.error('Upload failed');
-    } finally {
-      setUploading(false);
-    }
+  const rowSelection = {
+    selectedRowKeys: selectedCenterIds,
+    onChange: (keys: React.Key[]) => setSelectedCenterIds(keys as string[]),
+    getCheckboxProps: (record: CenterDistribution) => ({
+      disabled: record.status === 'Delivered',
+    }),
   };
 
   return (
     <div>
-      <div className="flex justify-end mb-4">
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setUploadOpen(true)}>
-          Upload Asset
-        </Button>
-      </div>
-      <Row gutter={[16, 16]}>
-        {assets.map((asset) => (
-          <Col key={asset.id} xs={12} sm={8} md={6} lg={4}>
-            <Card
-              size="small"
-              cover={
-                asset.type === 'IMAGE' && asset.thumbnailUrl ? (
-                  <img src={asset.thumbnailUrl} alt={asset.title} style={{ height: 100, objectFit: 'cover' }} />
-                ) : (
-                  <div
-                    style={{
-                      height: 100,
-                      background: '#f5f5f5',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <Typography.Text type="secondary">{asset.type}</Typography.Text>
-                  </div>
-                )
-              }
-            >
-              <Card.Meta
-                title={<Typography.Text style={{ fontSize: 12 }}>{asset.title}</Typography.Text>}
-                description={
-                  <Space wrap size={2}>
-                    {asset.tags.map((tag) => (
-                      <Tag key={tag} style={{ fontSize: 10, padding: '0 4px' }}>{tag}</Tag>
-                    ))}
-                  </Space>
-                }
-              />
-              <Button
-                size="small"
-                href={asset.url}
-                target="_blank"
-                block
-                className="mt-2"
-              >
-                Download
-              </Button>
-            </Card>
-          </Col>
-        ))}
-      </Row>
+      <Card title="Select Content Item" style={{ marginBottom: 16 }}>
+        <Select
+          placeholder="Choose a content item to distribute..."
+          style={{ width: '100%' }}
+          value={selectedItem?.id ?? undefined}
+          onChange={(id) => {
+            const found = items.find((i) => i.id === id) ?? null;
+            setSelectedItem(found);
+            setSelectedCenterIds([]);
+          }}
+          showSearch
+          optionFilterProp="children"
+          allowClear
+          onClear={() => { setSelectedItem(null); setSelectedCenterIds([]); }}
+        >
+          {items.map((item) => (
+            <Select.Option key={item.id} value={item.id}>
+              <Space>
+                {TYPE_ICON[item.type]}
+                {item.name}
+                <Text type="secondary" style={{ fontSize: 12 }}>({item.courseName})</Text>
+              </Space>
+            </Select.Option>
+          ))}
+        </Select>
+      </Card>
 
-      <Drawer title="Upload Marketing Asset" open={uploadOpen} onClose={() => setUploadOpen(false)} width={420}>
-        <Form form={form} layout="vertical" onFinish={handleUpload}>
-          <Form.Item name="title" label="Title" rules={[{ required: true }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item name="tags" label="Tags">
-            <Select mode="tags" placeholder="e.g. poster, brochure, logo" />
-          </Form.Item>
-          <Form.Item name="file" label="File (Image / PDF)" rules={[{ required: true }]}>
-            <Upload accept="image/*,.pdf" beforeUpload={() => false} maxCount={1}>
-              <Button icon={<UploadOutlined />}>Select File</Button>
-            </Upload>
-          </Form.Item>
-          <Button type="primary" htmlType="submit" loading={uploading} block>
-            Upload
-          </Button>
-        </Form>
-      </Drawer>
+      {selectedItem && (
+        <Card
+          title={
+            <Space>
+              <Text strong>Distribution Status</Text>
+              <Tag color={TYPE_COLOR[selectedItem.type]}>{selectedItem.type}</Tag>
+              <Text type="secondary">{selectedItem.name}</Text>
+            </Space>
+          }
+          extra={
+            <Button
+              type="primary"
+              icon={<SendOutlined />}
+              disabled={selectedCenterIds.length === 0}
+              loading={pushing}
+              onClick={handlePush}
+            >
+              Push to Selected ({selectedCenterIds.length})
+            </Button>
+          }
+        >
+          <Spin spinning={distLoading}>
+            <Table<CenterDistribution>
+              dataSource={centerDist}
+              columns={distColumns}
+              rowKey="centerId"
+              rowSelection={rowSelection}
+              size="small"
+              pagination={{ pageSize: 10 }}
+              locale={{ emptyText: 'No centers with this course found.' }}
+            />
+          </Spin>
+        </Card>
+      )}
     </div>
+  );
+}
+
+// ─── Upload Material Modal ────────────────────────────────────────────────────
+
+interface UploadModalProps {
+  open: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+  courses: Course[];
+}
+
+function UploadMaterialModal({ open, onClose, onCreated, courses }: UploadModalProps) {
+  const [form] = Form.useForm();
+  const [loading, setLoading] = useState(false);
+  const [materialType, setMaterialType] = useState<MaterialType>('PDF');
+  const [fileList, setFileList] = useState<UploadFile[]>([]);
+
+  const handleClose = () => {
+    form.resetFields();
+    setFileList([]);
+    setMaterialType('PDF');
+    onClose();
+  };
+
+  const handleSubmit = async () => {
+    let values: Record<string, unknown>;
+    try {
+      values = await form.validateFields();
+    } catch {
+      return;
+    }
+    setLoading(true);
+    try {
+      if (materialType === 'LINK') {
+        await apiClient.post('/api/v1/content-items', {
+          name: values.name,
+          type: 'LINK',
+          courseId: values.courseId,
+          url: values.url,
+        });
+      } else {
+        const formData = new FormData();
+        formData.append('name', String(values.name));
+        formData.append('type', materialType);
+        formData.append('courseId', String(values.courseId));
+        if (fileList[0]?.originFileObj) {
+          formData.append('file', fileList[0].originFileObj as File);
+        }
+        await apiClient.post('/api/v1/content-items', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      }
+      message.success('Material uploaded successfully');
+      onCreated();
+      handleClose();
+    } catch {
+      message.error('Upload failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal
+      title="Upload Material"
+      open={open}
+      onCancel={handleClose}
+      onOk={handleSubmit}
+      okText="Upload"
+      confirmLoading={loading}
+      width={560}
+      destroyOnClose
+    >
+      <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
+        <Form.Item name="name" label="Title" rules={[{ required: true, message: 'Title is required' }]}>
+          <Input placeholder="e.g. Introduction to Accounting - Chapter 1" />
+        </Form.Item>
+        <Row gutter={16}>
+          <Col span={12}>
+            <Form.Item name="courseId" label="Course" rules={[{ required: true, message: 'Select a course' }]}>
+              <Select placeholder="Select course">
+                {courses.map((c) => (
+                  <Select.Option key={c.id} value={c.id}>{c.name}</Select.Option>
+                ))}
+              </Select>
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item name="type" label="Type" initialValue="PDF">
+              <Radio.Group onChange={(e) => setMaterialType(e.target.value as MaterialType)}>
+                <Radio.Button value="PDF">PDF</Radio.Button>
+                <Radio.Button value="VIDEO">Video</Radio.Button>
+                <Radio.Button value="LINK">Link</Radio.Button>
+              </Radio.Group>
+            </Form.Item>
+          </Col>
+        </Row>
+        {materialType === 'LINK' ? (
+          <Form.Item name="url" label="URL" rules={[{ required: true, message: 'URL is required' }, { type: 'url', message: 'Enter a valid URL' }]}>
+            <Input prefix={<LinkOutlined />} placeholder="https://..." />
+          </Form.Item>
+        ) : (
+          <Form.Item label={materialType === 'PDF' ? 'PDF File' : 'Video File'} required>
+            <Dragger
+              accept={materialType === 'PDF' ? '.pdf' : 'video/*'}
+              beforeUpload={() => false}
+              fileList={fileList}
+              onChange={({ fileList: fl }) => setFileList(fl.slice(-1))}
+              maxCount={1}
+            >
+              <p className="ant-upload-drag-icon">
+                <InboxOutlined />
+              </p>
+              <p className="ant-upload-text">Click or drag file to upload</p>
+              <p className="ant-upload-hint">
+                {materialType === 'PDF' ? 'Supports PDF files only' : 'Supports common video formats'}
+              </p>
+            </Dragger>
+          </Form.Item>
+        )}
+      </Form>
+    </Modal>
   );
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ContentDistributionPage() {
+  const [activeTab, setActiveTab] = useState<string>('library');
+  const [pendingDistribution, setPendingDistribution] = useState<ContentItem | null>(null);
+
+  const handleDistribute = (item: ContentItem) => {
+    setPendingDistribution(item);
+    setActiveTab('distribution');
+  };
+
   return (
     <div>
-      <PageHeader title="Content Distribution" subtitle="Course materials and marketing assets" />
-      <Tabs defaultActiveKey="library">
-        <TabPane tab="Material Library" key="library">
-          <MaterialLibraryTab />
-          <DistributionJobsPanel />
+      <PageHeader
+        title="Content Distribution"
+        subtitle="Manage course materials and distribute them to centers"
+      />
+      <Tabs
+        activeKey={activeTab}
+        onChange={(key) => {
+          setActiveTab(key);
+          if (key !== 'distribution') setPendingDistribution(null);
+        }}
+      >
+        <TabPane tab="Content Library" key="library">
+          <ContentLibraryTab onSelectForDistribution={handleDistribute} />
         </TabPane>
-        <TabPane tab="Marketing Assets" key="marketing">
-          <MarketingAssetsTab />
+        <TabPane tab="Distribution" key="distribution">
+          <DistributionTab preselected={pendingDistribution} />
         </TabPane>
       </Tabs>
     </div>

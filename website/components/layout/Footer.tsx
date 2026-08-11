@@ -71,6 +71,7 @@ export function Footer() {
                 { href: "/legal/terms", label: t("footer.terms") },
                 { href: "/legal/privacy", label: t("footer.privacy") },
                 { href: "/legal/refund", label: t("footer.refund") },
+                { href: "/status", label: "System Status" },
               ].map((link) => (
                 <li key={link.href}>
                   <Link

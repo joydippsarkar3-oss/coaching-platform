@@ -21,6 +21,7 @@ class Routes {
   static const studentTyping = '/student/typing';   // S6
   static const studentWallet = '/student/wallet';   // S8
   static const studentDoubts = '/student/doubts';   // S10
+  static const studentPlacement = '/student/placement'; // S13
 
   // Teacher
   static const teacherToday = '/teacher/today';
@@ -29,6 +30,7 @@ class Routes {
   static const teacherAnnouncements = '/teacher/announcements';
   static const teacherHomework = '/teacher/homework';        // T4
   static const teacherDoubts = '/teacher/doubts';            // T5
+  static const teacherSchedule = '/teacher/schedule';        // T7
 
   // Deep links
   static const deepExam = '/exam/:examId';

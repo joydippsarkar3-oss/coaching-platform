@@ -50,6 +50,64 @@ export interface ManualCreditPayload {
   reason: string
 }
 
+// ── Center wallet ──────────────────────────────────────────────────────────
+
+export interface CenterWalletBalance {
+  commissionEarnedPaise: number
+  pendingSettlementPaise: number
+  totalBalancePaise: number
+  lastSettledAt: string | null
+}
+
+export interface CenterTransaction {
+  id: string
+  createdAt: string
+  description: string
+  type: 'credit' | 'debit'
+  amountPaise: number
+  balanceAfterPaise: number
+}
+
+export interface PromoCode {
+  id: string
+  code: string
+  discountPercent: number
+  validFrom: string
+  validTo: string
+  maxUses: number
+  useCount: number
+  isActive: boolean
+}
+
+export interface CreatePromoCodePayload {
+  code: string
+  discountPercent: number
+  validFrom: string
+  validTo: string
+  maxUses: number
+}
+
+export const centerWalletApi = {
+  getWalletBalance: () =>
+    apiClient.get<ApiResponse<CenterWalletBalance>>('/center/wallet/balance'),
+
+  getWalletTransactions: (page = 1, pageSize = 20) =>
+    apiClient.get<ApiResponse<CenterTransaction[]>>('/center/wallet/transactions', {
+      params: { page, pageSize },
+    }),
+
+  getPromoCodes: () =>
+    apiClient.get<ApiResponse<PromoCode[]>>('/center/promo-codes'),
+
+  createPromoCode: (payload: CreatePromoCodePayload) =>
+    apiClient.post<ApiResponse<PromoCode>>('/center/promo-codes', payload),
+
+  deletePromoCode: (id: string) =>
+    apiClient.delete<ApiResponse<null>>(`/center/promo-codes/${id}`),
+}
+
+// ── Student wallet (legacy) ─────────────────────────────────────────────────
+
 export const walletApi = {
   listWallets: (search?: string) =>
     apiClient.get<ApiResponse<WalletSummary[]>>('/wallet/list', {

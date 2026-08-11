@@ -25,3 +25,11 @@ Future<List<ExamSummary>> teacherAssessments(TeacherAssessmentsRef ref) =>
 Future<List<Announcement>> teacherAnnouncements(
         TeacherAnnouncementsRef ref) =>
     ref.watch(apiServiceProvider).getAnnouncements();
+
+@riverpod
+Future<List<ScheduleEntry>> teacherSchedule(TeacherScheduleRef ref) =>
+    ref.watch(apiServiceProvider).getTeacherSchedule();
+
+@riverpod
+Future<TeacherProfile> teacherProfile(TeacherProfileRef ref) =>
+    ref.watch(apiServiceProvider).getTeacherProfile();
