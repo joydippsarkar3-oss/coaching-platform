@@ -1,0 +1,68 @@
+{
+  "project_info": {
+    "project_number": "828305204195",
+    "project_id": "computrain-production",
+    "storage_bucket": "computrain-production.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:828305204195:android:a9db2df95cbd563c7cf6d6",
+        "android_client_info": {
+          "package_name": "com.android.application"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "828305204195-gqsihchmrh70l1mufv2i0tagiu1jmem6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBpdNHHYSQAcoiYm7kEwycM-mjZKsPdg0E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "828305204195-gqsihchmrh70l1mufv2i0tagiu1jmem6.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:828305204195:android:86c1f3c399aab1807cf6d6",
+        "android_client_info": {
+          "package_name": "com.brand.training_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "828305204195-gqsihchmrh70l1mufv2i0tagiu1jmem6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBpdNHHYSQAcoiYm7kEwycM-mjZKsPdg0E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "828305204195-gqsihchmrh70l1mufv2i0tagiu1jmem6.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -25,9 +25,9 @@ android/computrain.jks
 android/*.jks
 android/*.keystore
 
-# Firebase — contains API keys, do not commit real values
-app/lib/firebase_options.dart
-# (stub with PLACEHOLDER_* is safe to commit; real values are not)
+# Firebase — project identifiers (no private keys) are safe to commit.
+# Private key stays in backend/.env only (FIREBASE_PRIVATE_KEY).
+# app/lib/firebase_options.dart is intentionally tracked.
 
 # Flutter
 app/.dart_tool/

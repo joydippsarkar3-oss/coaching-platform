@@ -2,6 +2,7 @@ plugins {
     id "com.android.application"
     id "kotlin-android"
     id "dev.flutter.flutter-gradle-plugin"
+    id "com.google.gms.google-services"  // Firebase
 }
 
 // Read signing credentials from android/key.properties (never committed to git).
@@ -76,4 +77,13 @@ dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
     // WorkManager for background exam auto-submit
     implementation "androidx.work:work-runtime-ktx:2.9.0"
+
+    // Firebase BoM — manages all Firebase library versions together
+    implementation platform("com.google.firebase:firebase-bom:34.1.0")
+    // FCM push notifications
+    implementation "com.google.firebase:firebase-messaging"
+    // Phone Auth (OTP login)
+    implementation "com.google.firebase:firebase-auth"
+    // Analytics (optional but included in google-services.json)
+    implementation "com.google.firebase:firebase-analytics"
 }
