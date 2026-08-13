@@ -53,8 +53,8 @@ export function PWAInstallPrompt() {
     const choice = await prompt.userChoice;
     if (choice.outcome === "accepted") {
       // Analytics hook
-      if (typeof window !== "undefined" && (window as { gtag?: Function }).gtag) {
-        (window as { gtag: Function }).gtag("event", "pwa_install", {
+      if (typeof window !== "undefined" && (window as any).gtag) {
+        (window as any).gtag("event", "pwa_install", {
           event_category: "PWA",
           event_label: "accepted",
         });
