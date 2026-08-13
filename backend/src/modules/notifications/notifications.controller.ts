@@ -42,6 +42,39 @@ export class NotificationsController {
     return this.notificationsService.findAll(centerId, userId, +page, +limit);
   }
 
+  @Get('costs')
+  @Roles(Role.SUPER_ADMIN, Role.HO_STAFF, Role.CENTER_OWNER)
+  @ApiOperation({
+    summary: 'Communications spend for the center, split by channel',
+    description:
+      'Only SENT messages are billed. WhatsApp is charged per conversation, so ' +
+      'follow-ups inside an open 24-hour window cost nothing.',
+  })
+  @ApiQuery({ name: 'from', required: false, description: 'ISO date, inclusive' })
+  @ApiQuery({ name: 'to', required: false, description: 'ISO date, inclusive' })
+  getCosts(
+    @TenantId() centerId: string | null,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.notificationsService.getCostSummary(
+      centerId ?? undefined,
+      from ? new Date(from) : undefined,
+      to ? new Date(to) : undefined,
+    );
+  }
+
+  @Get('whatsapp-window/:phone')
+  @Roles(Role.SUPER_ADMIN, Role.HO_STAFF, Role.CENTER_OWNER, Role.CENTER_STAFF)
+  @ApiOperation({
+    summary: 'Whether free-form WhatsApp text may be sent to this number',
+    description:
+      'When closed, an outbound send must name a Meta-approved template.',
+  })
+  getWhatsappWindow(@Param('phone') phone: string) {
+    return this.notificationsService.getWhatsappWindow(phone);
+  }
+
   @Put(':id/read')
   @ApiOperation({ summary: 'Mark a notification as read' })
   markRead(@Param('id') id: string) {

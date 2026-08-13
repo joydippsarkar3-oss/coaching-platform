@@ -4,7 +4,6 @@ import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { authApi } from '@/api/endpoints/auth'
 import { useAuth } from '@/hooks/useAuth'
-import type { User } from '@/types/models'
 
 const { Title } = Typography
 
@@ -67,9 +66,13 @@ export function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      const res = await authApi.verifyOtp({ phone, otp: code })
-      const { tokens, user } = res.data.data
-      login(user as User, tokens.accessToken, tokens.refreshToken)
+      const { data: tokens } = await authApi.verifyOtp({ phone, otp: code })
+      // Verify returns tokens only; the profile comes from /users/me, which needs
+      // the access token to already be in storage for the request interceptor.
+      localStorage.setItem('accessToken', tokens.accessToken)
+      localStorage.setItem('refreshToken', tokens.refreshToken)
+      const { data: user } = await authApi.me()
+      login(user, tokens.accessToken, tokens.refreshToken)
     } catch {
       setError('Invalid OTP. Please check and try again.')
     } finally {

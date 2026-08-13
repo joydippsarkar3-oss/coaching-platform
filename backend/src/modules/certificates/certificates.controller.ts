@@ -5,7 +5,8 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { Request } from 'express';
 import { CertificatesService } from './certificates.service';
-import { RequestCertificateDto, IssueCertificateDto } from './dto/certificate.dto';
+import { RequestCertificateDto, RevokeCertificateDto } from './dto/certificate.dto';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { TenantInterceptor } from '../../common/interceptors/tenant.interceptor';
@@ -31,8 +32,11 @@ export class CertificatesController {
   @UseInterceptors(TenantInterceptor)
   @Post('request')
   @ApiOperation({ summary: 'Request a certificate for a completed enrollment' })
-  request(@Body() dto: RequestCertificateDto, @TenantId() centerId: string | null) {
-    return this.certificatesService.request(dto, centerId ?? undefined);
+  request(
+    @Body() dto: RequestCertificateDto,
+    @CurrentUser('userId') userId: string,
+  ) {
+    return this.certificatesService.requestIssuance(dto.enrollmentId, userId);
   }
 
   @ApiBearerAuth('access-token')
@@ -68,8 +72,8 @@ export class CertificatesController {
   @Roles(Role.SUPER_ADMIN, Role.HO_STAFF, Role.CENTER_OWNER)
   @Put(':id/issue')
   @ApiOperation({ summary: 'Issue a requested certificate (HO or center owner)' })
-  issue(@Param('id') id: string, @Body() dto: IssueCertificateDto) {
-    return this.certificatesService.issue(id, dto);
+  issue(@Param('id') id: string) {
+    return this.certificatesService.issueMany([id]);
   }
 
   @ApiBearerAuth('access-token')
@@ -79,7 +83,11 @@ export class CertificatesController {
   @Put(':id/revoke')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Revoke an issued certificate (HO only)' })
-  revoke(@Param('id') id: string) {
-    return this.certificatesService.revoke(id);
+  revoke(
+    @Param('id') id: string,
+    @Body() dto: RevokeCertificateDto,
+    @CurrentUser('userId') userId: string,
+  ) {
+    return this.certificatesService.revoke(id, dto.reason, userId);
   }
 }

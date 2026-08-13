@@ -49,7 +49,7 @@ export function EnquiryDetailPage() {
       </Card>
 
       <Card title="Update Stage" size="small">
-        <Form layout="inline" onFinish={(v) => handleUpdateStage(v.stage as string)}>
+        <Form form={form} layout="inline" onFinish={(v) => handleUpdateStage(v.stage as string)}>
           <Form.Item name="stage" initialValue={enquiry.stage}>
             <Select style={{ width: 160 }}>
               {STAGES.map((s) => (

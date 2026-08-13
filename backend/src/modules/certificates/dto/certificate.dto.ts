@@ -2,20 +2,22 @@ import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class RequestCertificateDto {
-  @ApiProperty({ description: 'Student ID' })
+  @ApiProperty({ description: 'Enrollment ID the certificate is requested for' })
   @IsString()
   @IsNotEmpty()
-  studentId: string;
-
-  @ApiProperty({ description: 'Course ID' })
-  @IsString()
-  @IsNotEmpty()
-  courseId: string;
+  enrollmentId: string;
 
   @ApiProperty({ required: false, description: 'Certificate template ID' })
   @IsOptional()
   @IsString()
   templateId?: string;
+}
+
+export class RevokeCertificateDto {
+  @ApiProperty({ description: 'Reason for revocation (retained in audit trail)' })
+  @IsString()
+  @IsNotEmpty()
+  reason: string;
 }
 
 export class IssueCertificateDto {

@@ -30,6 +30,8 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { CrmModule } from './modules/crm/crm.module';
 import { PlacementsModule } from './modules/placements/placements.module';
+import { E2eModule } from './modules/e2e/e2e.module';
+import { HealthModule } from './modules/health/health.module';
 
 @Module({
   imports: [
@@ -87,6 +89,9 @@ import { PlacementsModule } from './modules/placements/placements.module';
     PlacementsModule,
     AnalyticsModule,
     CrmModule,
+    HealthModule,
+    // No-op unless E2E_FIXTURES_ENABLED=true and NODE_ENV !== production.
+    E2eModule.register(),
   ],
 })
 export class AppModule implements NestModule {

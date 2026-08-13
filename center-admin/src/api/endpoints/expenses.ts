@@ -1,4 +1,4 @@
-import apiClient from '../client'
+import apiClient, { getBlob } from '../client'
 import type { ApiResponse } from '@/types/api'
 
 export type ExpenseCategory =
@@ -65,10 +65,10 @@ export const expensesApi = {
     apiClient.get<ApiResponse<Expense[]>>('/expenses', { params: { from, to } }),
 
   createExpense: (payload: CreateExpensePayload) =>
-    apiClient.post<ApiResponse<Expense>>('/api/v1/expenses', payload),
+    apiClient.post<ApiResponse<Expense>>('/expenses', payload),
 
   exportExpensesCsv: (from: string, to: string) =>
-    apiClient.get<Blob>('/expenses/export', { params: { from, to }, responseType: 'blob' }),
+    getBlob('/expenses/export', { from, to }),
 
   listInventory: () =>
     apiClient.get<ApiResponse<InventoryItem[]>>('/inventory'),

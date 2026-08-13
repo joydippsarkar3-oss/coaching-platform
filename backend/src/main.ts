@@ -16,8 +16,11 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT', 3000);
 
-  // Global prefix
-  app.setGlobalPrefix('api/v1');
+  // Global prefix. Health probes stay unversioned so load balancers, uptime
+  // monitors and container orchestrators can hit /health directly.
+  app.setGlobalPrefix('api/v1', {
+    exclude: ['health', 'health/ready'],
+  });
 
   // CORS
   app.enableCors({

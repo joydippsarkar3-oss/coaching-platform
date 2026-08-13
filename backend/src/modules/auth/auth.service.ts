@@ -12,7 +12,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
-  )
+  ) {}
 
   async requestOtp(dto: RequestOtpDto): Promise<{ message: string }> {
     const user = await this.prisma.user.findUnique({ where: { phone: dto.phone } });

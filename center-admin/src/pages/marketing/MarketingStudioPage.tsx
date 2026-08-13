@@ -17,7 +17,7 @@ import {
   message,
 } from 'antd'
 import { useRef, useState } from 'react'
-import { QRCodeCanvas } from 'qrcode.react'
+import { QRCodeCanvas } from '@/components/shared/QRCodeCanvas'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { useApi } from '@/hooks/useApi'
 import { useTenantStore } from '@/store/tenant.store'

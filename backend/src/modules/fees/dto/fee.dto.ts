@@ -20,6 +20,11 @@ export class CreateFeePlanDto {
 }
 
 export class CollectPaymentDto {
+  @ApiProperty({ description: 'Enrollment the installment belongs to' })
+  @IsString()
+  @IsNotEmpty()
+  enrollmentId: string;
+
   @ApiProperty({ description: 'Installment ID to collect payment for' })
   @IsString()
   @IsNotEmpty()

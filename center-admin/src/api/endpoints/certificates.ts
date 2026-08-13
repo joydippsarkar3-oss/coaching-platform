@@ -1,4 +1,4 @@
-import apiClient from '../client'
+import apiClient, { getBlob } from '../client'
 import type { ApiResponse, CertificateIssuanceRequest } from '@/types/api'
 import type { Certificate } from '@/types/models'
 
@@ -14,5 +14,5 @@ export const certificatesApi = {
   getStatus: () => apiClient.get<ApiResponse<Certificate[]>>('/certificates'),
 
   download: (certificateId: string) =>
-    apiClient.get<Blob>(`/certificates/${certificateId}/download`, { responseType: 'blob' }),
+    getBlob(`/certificates/${certificateId}/download`),
 }

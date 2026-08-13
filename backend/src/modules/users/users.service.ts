@@ -66,16 +66,17 @@ export class UsersService {
 
   async assignRole(id: string, dto: AssignRoleDto) {
     await this.findOne(id);
-    return this.prisma.roleAssignment.upsert({
-      where: {
-        userId_centerId_role: {
-          userId: id,
-          centerId: dto.centerId ?? null,
-          role: dto.role,
-        },
-      },
-      update: {},
-      create: { userId: id, centerId: dto.centerId ?? null, role: dto.role },
+    const centerId = dto.centerId ?? null;
+
+    // A compound unique lookup cannot express a NULL centerId (HO-level role),
+    // so match first and only create when absent.
+    const existing = await this.prisma.roleAssignment.findFirst({
+      where: { userId: id, centerId, role: dto.role },
+    });
+    if (existing) return existing;
+
+    return this.prisma.roleAssignment.create({
+      data: { userId: id, centerId, role: dto.role },
     });
   }
 

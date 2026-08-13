@@ -1,6 +1,5 @@
 import { DownloadOutlined } from '@ant-design/icons'
 import { Button, Card, Col, DatePicker, Form, Row, Select } from 'antd'
-import type { RangePickerProps } from 'antd/es/date-picker'
 import { useState } from 'react'
 import { reportsApi } from '@/api/endpoints/reports'
 import { useApi } from '@/hooks/useApi'

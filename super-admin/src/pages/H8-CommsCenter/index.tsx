@@ -64,7 +64,7 @@ export default function CommsCenter() {
       message.success('Broadcast created');
       if (!values.scheduledAt) {
         // immediate send
-        await commsApi.sendBroadcast((res as { id: string }).id);
+        await commsApi.sendBroadcast(res.data.id);
         message.success('Broadcast sent');
       }
       mutateBroadcasts();

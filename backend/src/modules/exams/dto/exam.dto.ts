@@ -69,6 +69,23 @@ export class StartAttemptDto {
   studentId: string;
 }
 
+export class BeginAttemptDto {
+  @ApiProperty({ description: 'Student ID the attempt belongs to' })
+  @IsString()
+  @IsNotEmpty()
+  studentId: string;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'Raw client device fingerprint. The attempt binds to the first device that begins it; ' +
+      'later writes from a different device are rejected.',
+  })
+  @IsOptional()
+  @IsString()
+  deviceFingerprint?: string;
+}
+
 export class SubmitAttemptDto {
   @ApiProperty({
     description: 'Array of answers: [{questionId, selectedKey}]',
@@ -76,4 +93,12 @@ export class SubmitAttemptDto {
     items: { type: 'object', properties: { questionId: { type: 'string' }, selectedKey: { type: 'string' } } },
   })
   answers: Array<{ questionId: string; selectedKey: string }>;
+
+  @ApiProperty({
+    required: false,
+    description: 'Raw client device fingerprint; must match the device the attempt is bound to.',
+  })
+  @IsOptional()
+  @IsString()
+  deviceFingerprint?: string;
 }

@@ -1,15 +1,17 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { SendNotificationDto } from './dto/notification.dto';
-import { NotificationChannel } from '@prisma/client';
 import { WabaProvider } from './providers/waba.provider';
 import { SmsProvider } from './providers/sms.provider';
 import { EmailProvider } from './providers/email.provider';
 import { FcmProvider } from './providers/fcm.provider';
+import { WhatsappWindowService } from './whatsapp-window.service';
+import { ChannelCosts, costForSend, loadChannelCosts } from './channel-cost';
 
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
+  private readonly costs: ChannelCosts = loadChannelCosts();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -17,6 +19,7 @@ export class NotificationsService {
     private readonly sms: SmsProvider,
     private readonly email: EmailProvider,
     private readonly fcm: FcmProvider,
+    private readonly window: WhatsappWindowService,
   ) {}
 
   async send(dto: SendNotificationDto, centerId?: string) {
@@ -34,14 +37,27 @@ export class NotificationsService {
       },
     });
 
-    // Dispatch via the appropriate stub provider
     try {
-      await this.dispatch(dto.channel, dto.recipient, dto.subject ?? null, dto.body);
+      // WhatsApp is billed per conversation: a send inside an already-open
+      // window is free, so the window state decides both the transport
+      // (free-form vs template) and the cost attributed to the center.
+      const windowOpen =
+        dto.channel === 'WHATSAPP'
+          ? await this.window.isOpen(dto.recipient)
+          : false;
+
+      await this.dispatch(dto, windowOpen);
+
       await this.prisma.notification.update({
         where: { id: notification.id },
-        data: { status: 'SENT', sentAt: new Date() },
+        data: {
+          status: 'SENT',
+          sentAt: new Date(),
+          costPaise: costForSend(dto.channel, this.costs, !windowOpen),
+        },
       });
     } catch (err) {
+      // A failed send is not billed.
       await this.prisma.notification.update({
         where: { id: notification.id },
         data: { status: 'FAILED' },
@@ -50,6 +66,42 @@ export class NotificationsService {
     }
 
     return notification;
+  }
+
+  /**
+   * Communications spend for a center over a date range, split by channel.
+   * Only SENT messages are counted — failures are not billed.
+   */
+  async getCostSummary(centerId?: string, from?: Date, to?: Date) {
+    const where = {
+      status: 'SENT' as const,
+      ...(centerId ? { centerId } : {}),
+      ...(from || to
+        ? { sentAt: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } }
+        : {}),
+    };
+
+    const grouped = await this.prisma.notification.groupBy({
+      by: ['channel'],
+      where,
+      _sum: { costPaise: true },
+      _count: { _all: true },
+    });
+
+    const byChannel = grouped.map((g) => ({
+      channel: g.channel,
+      messages: g._count._all,
+      costPaise: g._sum.costPaise ?? 0,
+    }));
+
+    return {
+      centerId: centerId ?? null,
+      from: from ?? null,
+      to: to ?? null,
+      totalCostPaise: byChannel.reduce((sum, c) => sum + c.costPaise, 0),
+      totalMessages: byChannel.reduce((sum, c) => sum + c.messages, 0),
+      byChannel,
+    };
   }
 
   async findAll(centerId?: string, userId?: string, page = 1, limit = 20) {
@@ -72,18 +124,27 @@ export class NotificationsService {
     });
   }
 
-  private async dispatch(
-    channel: NotificationChannel,
-    recipient: string,
-    subject: string | null,
-    body: string,
-  ): Promise<void> {
+  async getWhatsappWindow(phone: string) {
+    const state = await this.window.getState(phone);
+    return {
+      phone: this.window.constructor.name === 'WhatsappWindowService'
+        ? (this.window as any).constructor.normalize?.(phone) ?? phone
+        : phone,
+      isOpen: state.isOpen,
+      expiresAt: state.expiresAt,
+    };
+  }
+
+  private async dispatch(dto: SendNotificationDto, windowOpen: boolean): Promise<void> {
+    const { channel, recipient, body } = dto;
+    const subject = dto.subject ?? null;
+
     switch (channel) {
       case 'SMS':
         await this.sms.send(recipient, body);
         break;
       case 'WHATSAPP':
-        await this.waba.sendText(recipient, body);
+        await this.dispatchWhatsApp(dto, windowOpen);
         break;
       case 'EMAIL':
         await this.email.send(recipient, subject ?? '', body);
@@ -98,5 +159,34 @@ export class NotificationsService {
       default:
         this.logger.warn(`Unknown channel: ${channel}`);
     }
+  }
+
+  /**
+   * Inside an open 24-hour window free-form text is allowed. Outside it Meta
+   * only accepts a pre-approved template, so a send with no template name would
+   * be rejected by the API — fail fast with a clear reason instead.
+   */
+  private async dispatchWhatsApp(
+    dto: SendNotificationDto,
+    windowOpen: boolean,
+  ): Promise<void> {
+    if (windowOpen) {
+      await this.waba.sendText(dto.recipient, dto.body);
+      return;
+    }
+
+    if (!dto.templateName) {
+      throw new BadRequestException(
+        `WhatsApp service window for ${dto.recipient} is closed. ` +
+          'Provide templateName (a Meta-approved template) to send outside the 24-hour window.',
+      );
+    }
+
+    await this.waba.sendTemplate(
+      dto.recipient,
+      dto.templateName,
+      dto.templateLang ?? 'en',
+      dto.templateComponents ?? [],
+    );
   }
 }

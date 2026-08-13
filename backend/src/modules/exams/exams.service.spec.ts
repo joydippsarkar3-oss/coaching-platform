@@ -1,4 +1,5 @@
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, ForbiddenException } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import { ExamsService } from './exams.service';
 import { createPrismaMock } from '../../test/prisma.mock';
 
@@ -47,9 +48,6 @@ describe('ExamsService', () => {
         selectedKey: overrides.selectedKey,
         question: {
           id: overrides.questionId ?? overrides.question.id ?? 'q-1',
-          marks: overrides.question.marks,
-          correctKey: overrides.question.correctKey,
-          type: overrides.question.type,
           ...overrides.question,
         },
       };
@@ -337,6 +335,175 @@ describe('ExamsService', () => {
       expect(prisma.examAttempt.update).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: 'attempt-good' } }),
       );
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Device binding
+  // ─────────────────────────────────────────────────────────────────────────
+
+  describe('device binding', () => {
+    const sha256 = (raw: string) => createHash('sha256').update(raw).digest('hex');
+    const DEVICE_A = 'navigator-fingerprint-A';
+    const DEVICE_B = 'navigator-fingerprint-B';
+
+    function issuedAttempt(overrides: Record<string, unknown> = {}) {
+      return {
+        id: 'attempt-1',
+        studentId: 'stu-1',
+        centerId: 'center-1',
+        status: 'ISSUED',
+        deviceFingerprint: null,
+        exam: { id: 'exam-1', startsAt: null, endsAt: null },
+        ...overrides,
+      };
+    }
+
+    it('binds the hashed fingerprint on first start', async () => {
+      prisma.examAttempt.findUnique.mockResolvedValue(issuedAttempt() as any);
+      prisma.examAttempt.update.mockResolvedValue({} as any);
+
+      await service.startAttempt('attempt-1', 'stu-1', DEVICE_A);
+
+      expect(prisma.examAttempt.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'attempt-1' },
+          data: expect.objectContaining({
+            status: 'IN_PROGRESS',
+            deviceFingerprint: sha256(DEVICE_A),
+          }),
+        }),
+      );
+    });
+
+    it('stores the raw fingerprint hashed, never verbatim', async () => {
+      prisma.examAttempt.findUnique.mockResolvedValue(issuedAttempt() as any);
+      prisma.examAttempt.update.mockResolvedValue({} as any);
+
+      await service.startAttempt('attempt-1', 'stu-1', DEVICE_A);
+
+      const data = prisma.examAttempt.update.mock.calls[0][0].data;
+      expect(data.deviceFingerprint).not.toBe(DEVICE_A);
+      expect(data.deviceFingerprint).toHaveLength(64);
+    });
+
+    it('leaves the binding null when the client sends no fingerprint', async () => {
+      prisma.examAttempt.findUnique.mockResolvedValue(issuedAttempt() as any);
+      prisma.examAttempt.update.mockResolvedValue({} as any);
+
+      await service.startAttempt('attempt-1', 'stu-1');
+
+      expect(prisma.examAttempt.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ deviceFingerprint: null }),
+        }),
+      );
+    });
+
+    it('rejects saveAnswers from a different device', async () => {
+      prisma.examAttempt.findUnique.mockResolvedValue({
+        id: 'attempt-1',
+        centerId: 'center-1',
+        status: 'IN_PROGRESS',
+        deviceFingerprint: sha256(DEVICE_A),
+      } as any);
+
+      await expect(
+        service.saveAnswers('attempt-1', [{ questionId: 'q1', answer: 'A' }], undefined, DEVICE_B),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.examAnswer.upsert).not.toHaveBeenCalled();
+    });
+
+    it('rejects saveAnswers when a bound attempt presents no fingerprint', async () => {
+      prisma.examAttempt.findUnique.mockResolvedValue({
+        id: 'attempt-1',
+        centerId: 'center-1',
+        status: 'IN_PROGRESS',
+        deviceFingerprint: sha256(DEVICE_A),
+      } as any);
+
+      await expect(
+        service.saveAnswers('attempt-1', [{ questionId: 'q1', answer: 'A' }]),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('allows saveAnswers from the bound device', async () => {
+      prisma.examAttempt.findUnique.mockResolvedValue({
+        id: 'attempt-1',
+        centerId: 'center-1',
+        status: 'IN_PROGRESS',
+        deviceFingerprint: sha256(DEVICE_A),
+      } as any);
+      prisma.examAnswer.upsert.mockResolvedValue({} as any);
+
+      await service.saveAnswers(
+        'attempt-1',
+        [{ questionId: 'q1', answer: 'A' }],
+        undefined,
+        DEVICE_A,
+      );
+
+      expect(prisma.examAnswer.upsert).toHaveBeenCalled();
+    });
+
+    it('allows saveAnswers on an unbound attempt so in-flight exams are not locked out', async () => {
+      prisma.examAttempt.findUnique.mockResolvedValue({
+        id: 'attempt-1',
+        centerId: 'center-1',
+        status: 'IN_PROGRESS',
+        deviceFingerprint: null,
+      } as any);
+      prisma.examAnswer.upsert.mockResolvedValue({} as any);
+
+      await service.saveAnswers('attempt-1', [{ questionId: 'q1', answer: 'A' }]);
+
+      expect(prisma.examAnswer.upsert).toHaveBeenCalled();
+    });
+
+    it('rejects submitAttempt from a different device', async () => {
+      prisma.examAttempt.findUnique.mockResolvedValue({
+        id: 'attempt-1',
+        status: 'IN_PROGRESS',
+        centerId: 'center-1',
+        deviceFingerprint: sha256(DEVICE_A),
+        exam: { id: 'exam-1', passingMarks: 40, endsAt: null, config: {} },
+        answers: [],
+      } as any);
+
+      await expect(service.submitAttempt('attempt-1', false, DEVICE_B)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(prisma.examAttempt.update).not.toHaveBeenCalled();
+    });
+
+    it('exempts the auto-submit cron (force) from device binding', async () => {
+      const bound = {
+        id: 'attempt-1',
+        status: 'IN_PROGRESS',
+        centerId: 'center-1',
+        deviceFingerprint: sha256(DEVICE_A),
+        exam: { id: 'exam-1', passingMarks: 40, endsAt: null, config: {} },
+        answers: [],
+      };
+      prisma.examAttempt.findUnique.mockResolvedValue(bound as any);
+      prisma.examAttempt.update.mockResolvedValue({ ...bound, status: 'SUBMITTED' } as any);
+
+      await service.submitAttempt('attempt-1', true);
+
+      expect(prisma.examAttempt.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'SUBMITTED' }) }),
+      );
+    });
+
+    it('rejects a start from a device other than the bound one', async () => {
+      prisma.examAttempt.findUnique.mockResolvedValue(
+        issuedAttempt({ deviceFingerprint: sha256(DEVICE_A) }) as any,
+      );
+
+      await expect(service.startAttempt('attempt-1', 'stu-1', DEVICE_B)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(prisma.examAttempt.update).not.toHaveBeenCalled();
     });
   });
 });

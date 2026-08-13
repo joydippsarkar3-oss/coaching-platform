@@ -212,8 +212,8 @@ export class ConsentService {
           name: true,
           email: true,
           phone: true,
-          role: true,
           createdAt: true,
+          roleAssignments: { select: { role: true, centerId: true } },
         },
       }),
       this.prisma.enrollment.findMany({

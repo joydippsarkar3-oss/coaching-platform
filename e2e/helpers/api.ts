@@ -9,21 +9,33 @@ export function createApiClient(token?: string): AxiosInstance {
   });
 }
 
-/** Request an OTP for a seeded test phone and return the code from the DB. */
+/**
+ * Requests an OTP for a seeded test phone and returns the code.
+ * TEST_OTP short-circuits the lookup when the backend runs with a fixed OTP;
+ * otherwise the code is read back from the test-only /e2e/otp endpoint.
+ */
 export async function requestTestOtp(phone: string): Promise<string> {
   const api = createApiClient();
-  await api.post('/auth/request-otp', { phone });
-  // In CI the OTP is fixed via TEST_OTP_BYPASS env; in dev query DB
-  return process.env.TEST_OTP ?? '123456';
+  await api.post('/auth/otp/request', { phone });
+
+  if (process.env.TEST_OTP) return process.env.TEST_OTP;
+
+  const { data } = await api.get<{ code: string | null }>('/e2e/otp', {
+    params: { phone },
+  });
+  if (!data.code) {
+    throw new Error(`No active OTP found for ${phone}. Is E2E_FIXTURES_ENABLED=true?`);
+  }
+  return data.code;
 }
 
 /** Full login flow: request OTP → verify → return access token. */
 export async function loginAs(phone: string): Promise<string> {
   const api = createApiClient();
-  const otp = await requestTestOtp(phone);
-  const resp = await api.post<{ access_token: string }>(
-    '/auth/verify-otp',
-    { phone, otp },
+  const code = await requestTestOtp(phone);
+  const resp = await api.post<{ accessToken: string; refreshToken: string }>(
+    '/auth/otp/verify',
+    { phone, code },
   );
-  return resp.data.access_token;
+  return resp.data.accessToken;
 }

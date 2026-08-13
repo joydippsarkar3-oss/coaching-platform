@@ -55,6 +55,13 @@ export class FeesController {
     @TenantId() centerId: string | null,
     @CurrentUser('id') userId: string,
   ) {
-    return this.feesService.collectPayment(dto, centerId ?? undefined, userId);
+    return this.feesService.collectPayment(
+      dto.enrollmentId,
+      dto.installmentId,
+      dto.amountPaise,
+      dto.method,
+      dto.gatewayRef,
+      userId,
+    );
   }
 }

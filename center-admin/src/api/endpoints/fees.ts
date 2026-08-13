@@ -1,4 +1,4 @@
-import apiClient from '../client'
+import apiClient, { getBlob } from '../client'
 import type {
   ApiResponse,
   CollectPaymentRequest,
@@ -15,7 +15,7 @@ export const feesApi = {
     apiClient.post<ApiResponse<CollectPaymentResponse>>('/fees/collect', payload),
 
   getReceipt: (receiptId: string) =>
-    apiClient.get<Blob>(`/fees/receipts/${receiptId}`, { responseType: 'blob' }),
+    getBlob(`/fees/receipts/${receiptId}`),
 
   getDuesAging: () => apiClient.get<ApiResponse<DuesAgingBuckets>>('/fees/dues-aging'),
 

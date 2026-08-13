@@ -1,6 +1,9 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios'
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080'
+// The backend mounts every route under /api/v1, so the prefix lives here and
+// endpoint modules use bare paths like '/students'.
+const API_ORIGIN = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000'
+const BASE_URL = `${API_ORIGIN.replace(/\/+$/, '')}/api/v1`
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,
@@ -66,5 +69,17 @@ apiClient.interceptors.response.use(
     }
   },
 )
+
+/**
+ * GETs a binary payload and unwraps it to the raw Blob, since every download
+ * call site feeds the result straight into URL.createObjectURL.
+ */
+export async function getBlob(
+  url: string,
+  params?: Record<string, unknown>,
+): Promise<Blob> {
+  const res = await apiClient.get<Blob>(url, { params, responseType: 'blob' })
+  return res.data
+}
 
 export default apiClient

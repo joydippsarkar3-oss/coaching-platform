@@ -1,4 +1,4 @@
-import apiClient from '../client'
+import apiClient, { getBlob } from '../client'
 import type { ApiResponse, AdmissionWizardPayload } from '@/types/api'
 import type { Enrollment, Course, Batch, FeePlan } from '@/types/models'
 
@@ -30,5 +30,5 @@ export const admissionsApi = {
     }),
 
   getAdmissionLetter: (enrollmentId: string) =>
-    apiClient.get<Blob>(`/admissions/${enrollmentId}/letter`, { responseType: 'blob' }),
+    getBlob(`/admissions/${enrollmentId}/letter`),
 }

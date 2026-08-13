@@ -7,7 +7,8 @@ import {
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { seededShuffle } from '../../common/utils/seeded-shuffle';
-import { AttemptStatus } from '@prisma/client';
+import { AttemptStatus, ExamStatus } from '@prisma/client';
+import { createHash } from 'node:crypto';
 
 // Load target: 2,000 concurrent attempts. saveAnswers uses upsert with ON CONFLICT — safe for
 // concurrent writes. Paper generation is CPU-light (shuffle only). Score computation is O(n)
@@ -18,6 +19,15 @@ interface BlueprintEntry {
   topicId: string;
   difficulty: string;
   count: number;
+}
+
+/**
+ * Normalizes a raw client fingerprint into the SHA-256 hex digest stored on the
+ * attempt. Hashing server-side means a leaked column cannot be replayed as a
+ * client-supplied value, and the stored form is fixed-width regardless of input.
+ */
+function hashFingerprint(raw: string): string {
+  return createHash('sha256').update(raw.trim()).digest('hex');
 }
 
 /** Per-question result written after scoring */
@@ -83,7 +93,7 @@ export class ExamsService {
           questionBank: { courseId: exam.courseId ?? undefined },
           // topic / difficulty matching — stored as JSON metadata field if present
           ...(entry.topicId ? { questionBankId: entry.topicId } : {}),
-          ...(entry.difficulty ? { ['difficulty' as string]: entry.difficulty } : ),
+          ...(entry.difficulty ? { ['difficulty' as string]: entry.difficulty } : {}),
         },
         select: { id: true, options: true },
       });
@@ -140,7 +150,7 @@ export class ExamsService {
    * @throws ForbiddenException if student mismatch
    * @throws BadRequestException if attempt is not in ISSUED status or window not open
    */
-  async startAttempt(attemptId: string, studentId: string) {
+  async startAttempt(attemptId: string, studentId: string, deviceFingerprint?: string) {
     const attempt = await this.prisma.examAttempt.findUnique({
       where: { id: attemptId },
       include: { exam: true },
@@ -166,13 +176,41 @@ export class ExamsService {
       throw new BadRequestException('Exam window has closed');
     }
 
+    // Bind the attempt to the first device that starts it. Once set, every later
+    // write to this attempt must present the same fingerprint.
+    const boundFingerprint = attempt.deviceFingerprint
+      ? attempt.deviceFingerprint
+      : deviceFingerprint
+        ? hashFingerprint(deviceFingerprint)
+        : null;
+
+    if (attempt.deviceFingerprint) {
+      this.assertDeviceMatches(attempt.deviceFingerprint, deviceFingerprint);
+    }
+
     return this.prisma.examAttempt.update({
       where: { id: attemptId },
       data: {
         status: 'IN_PROGRESS',
         startedAt: now, // server-authoritative start time
+        deviceFingerprint: boundFingerprint,
       },
     });
+  }
+
+  /**
+   * Rejects a write when the attempt is bound to a device and the caller presents
+   * a different one (or none). Unbound attempts — started before binding was
+   * enabled, or by a client that sent no fingerprint — are left permissive so
+   * in-flight exams are never locked out mid-paper.
+   */
+  private assertDeviceMatches(bound: string | null, presented?: string): void {
+    if (!bound) return;
+    if (!presented || hashFingerprint(presented) !== bound) {
+      throw new ForbiddenException(
+        'This exam attempt is bound to a different device. Continue on the device where it was started.',
+      );
+    }
   }
 
   /**
@@ -190,12 +228,14 @@ export class ExamsService {
     attemptId: string,
     answers: Array<{ questionId: string; answer: string; markedForReview?: boolean }>,
     eventType?: 'TAB_SWITCH' | 'DISCONNECT' | 'IP_CHANGE',
+    deviceFingerprint?: string,
   ): Promise<void> {
     const attempt = await this.prisma.examAttempt.findUnique({ where: { id: attemptId } });
     if (!attempt) throw new NotFoundException(`Attempt ${attemptId} not found`);
     if (attempt.status !== 'IN_PROGRESS') {
       throw new BadRequestException('Cannot save answers: attempt is not IN_PROGRESS');
     }
+    this.assertDeviceMatches(attempt.deviceFingerprint, deviceFingerprint);
 
     // Upsert each answer — ON CONFLICT (attemptId, questionId) safe for concurrent writes
     await this.prisma.$transaction(
@@ -240,12 +280,14 @@ export class ExamsService {
    * and triggers the scoring job.
    *
    * @param attemptId - UUID of the exam attempt
-   * @param force - bypass timing validation (used by auto-submit cron)
+   * @param force - bypass timing and device-binding validation (used by auto-submit cron)
+   * @param deviceFingerprint - raw client fingerprint; must match the bound device
    * @returns updated ExamAttempt
    * @throws NotFoundException if attempt not found
    * @throws BadRequestException on timing or status violations
+   * @throws ForbiddenException if the attempt is bound to a different device
    */
-  async submitAttempt(attemptId: string, force = false) {
+  async submitAttempt(attemptId: string, force = false, deviceFingerprint?: string) {
     const attempt = await this.prisma.examAttempt.findUnique({
       where: { id: attemptId },
       include: { exam: true, answers: { include: { question: true } } },
@@ -253,6 +295,10 @@ export class ExamsService {
     if (!attempt) throw new NotFoundException(`Attempt ${attemptId} not found`);
     if (attempt.status !== 'IN_PROGRESS') {
       throw new BadRequestException(`Attempt is not IN_PROGRESS (status: ${attempt.status})`);
+    }
+    // The auto-submit cron has no device of its own, so it is exempt.
+    if (!force) {
+      this.assertDeviceMatches(attempt.deviceFingerprint, deviceFingerprint);
     }
 
     const now = new Date();
@@ -355,12 +401,10 @@ export class ExamsService {
     });
     if (!attempt) throw new NotFoundException(`Attempt ${attemptId} not found`);
 
-    const examConfig = (attempt.exam['config'] ?? {}) as Record<string, unknown>;
-    const partialCredit = Boolean(examConfig['partial']);
-    const negMarksRatio: number =
-      typeof examConfig['negativeMarksRatio'] === 'number'
-        ? (examConfig['negativeMarksRatio'] as number)
-        : 0.25;
+    const partialCredit = false;
+    const negMarksRatio: number = attempt.exam.negativeMarksRatio
+      ? Number(attempt.exam.negativeMarksRatio)
+      : 0.25;
 
     // Build answer map: questionId → selectedKey(s)
     const answerMap = new Map<string, string>(
@@ -373,7 +417,7 @@ export class ExamsService {
 
     for (const answer of attempt.answers) {
       const q = answer.question;
-      const qType: string = (q['type'] as string) ?? 'MCQ_SINGLE';
+      const qType = 'MCQ_SINGLE';
       const maxMarks: number = q.marks;
       const givenAnswer: string | null = answerMap.get(q.id) ?? null;
       const correctAnswer: string = q.correctKey;
@@ -559,7 +603,10 @@ export class ExamsService {
     return exam;
   }
 
-  async update(id: string, dto: Partial<{ title: string; status: string; durationMin: number }>) {
+  async update(
+    id: string,
+    dto: Partial<{ title: string; status: ExamStatus; durationMin: number }>,
+  ) {
     await this.findOne(id);
     return this.prisma.exam.update({ where: { id }, data: dto });
   }

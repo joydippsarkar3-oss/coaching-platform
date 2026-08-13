@@ -68,15 +68,20 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  generate: true
 
-  assets:
-    - assets/images/
-    - assets/icons/
-
-  fonts:
-    - family: NotoSans
-      fonts:
-        - asset: assets/fonts/NotoSans-Regular.ttf
-        - asset: assets/fonts/NotoSans-Bold.ttf
-          weight: 700
+  # Asset and font bundles are declared as the files land. Declaring a directory
+  # that does not exist fails `flutter build`, so keep these in step with disk:
+  #
+  #   assets:
+  #     - assets/images/
+  #     - assets/icons/
+  #
+  #   fonts:
+  #     - family: NotoSans
+  #       fonts:
+  #         - asset: assets/fonts/NotoSans-Regular.ttf
+  #         - asset: assets/fonts/NotoSans-Bold.ttf
+  #           weight: 700
+  #
+  # NotoSans is referenced by app_theme.dart; until the .ttf files are added
+  # Flutter falls back to the platform default rather than erroring.

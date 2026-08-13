@@ -4,7 +4,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { TenantContext } from '../../common/context/tenant.context';
+import { TenantContext } from '../../common/middleware/tenant.storage';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
 import { AddTicketMessageDto } from './dto/add-ticket-message.dto';

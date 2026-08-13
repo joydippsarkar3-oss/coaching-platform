@@ -9,7 +9,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { ContentItemsService } from './content-items.service';
 import { CreateContentItemDto } from './dto/create-content-item.dto';
 import { UpdateContentItemDto } from './dto/update-content-item.dto';

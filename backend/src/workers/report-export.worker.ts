@@ -3,6 +3,7 @@ import { Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import { Job } from 'bull';
 import { Queue } from 'bull';
+import { EnrollmentStatus } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 
 /**
@@ -208,7 +209,9 @@ export class ReportExportWorker {
       const enrollments = await this.prisma.enrollment.findMany({
         where: {
           ...centerWhere,
-          ...(filters['status'] ? { status: filters['status'] as string } : {}),
+          ...(filters['status']
+            ? { status: filters['status'] as EnrollmentStatus }
+            : {}),
           ...(cursor ? { id: { gt: cursor } } : {}),
         },
         take: PAGE_SIZE,

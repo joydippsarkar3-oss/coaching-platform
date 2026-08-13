@@ -9,7 +9,8 @@ export interface User {
   email?: string
   role: UserRole
   centerId: string
-  createdAt: string
+  /** Absent from the login payload; only populated by user-management endpoints. */
+  createdAt?: string
 }
 
 export interface Center {

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 
 export interface WriteAuditLogInput {
@@ -18,7 +19,15 @@ export class AuditService {
   constructor(private readonly prisma: PrismaService) {}
 
   async write(input: WriteAuditLogInput) {
-    return this.prisma.auditLog.create({ data: input });
+    const { oldValue, newValue, ...rest } = input;
+    return this.prisma.auditLog.create({
+      data: {
+        ...rest,
+        // Prisma requires omission (or JsonNull) rather than `null` for optional Json
+        ...(oldValue ? { oldValue: oldValue as Prisma.InputJsonValue } : {}),
+        ...(newValue ? { newValue: newValue as Prisma.InputJsonValue } : {}),
+      },
+    });
   }
 
   async findAll(centerId?: string, entity?: string, page = 1, limit = 50) {

@@ -1,7 +1,6 @@
 import { useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store'
-import { authApi } from '@/api/endpoints/auth'
 import type { User } from '@/types/models'
 
 export function useAuth() {
@@ -16,15 +15,11 @@ export function useAuth() {
     [setAuth, navigate],
   )
 
-  const logout = useCallback(async () => {
-    try {
-      await authApi.logout()
-    } catch {
-      // ignore errors on logout
-    } finally {
-      clearAuth()
-      navigate('/login')
-    }
+  // The backend issues stateless JWTs with no revocation endpoint, so logging
+  // out means discarding the tokens locally.
+  const logout = useCallback(() => {
+    clearAuth()
+    navigate('/login')
   }, [clearAuth, navigate])
 
   return { user, isAuthenticated, login, logout }

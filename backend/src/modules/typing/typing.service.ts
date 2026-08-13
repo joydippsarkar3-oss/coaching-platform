@@ -11,7 +11,7 @@ import { SubmitAttemptDto, KeystrokeEventDto } from './dto/submit-attempt.dto';
 // Preset configurations — exact official scoring rules
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface PresetConfig {
+export interface PresetConfig {
   durationSeconds: number;
   passWpmNet: number | null;
   passAccuracy: number | null;
@@ -63,13 +63,13 @@ const PRESETS: Record<string, PresetConfig> = {
 // Internal interfaces
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface ErrorBreakdown {
+export interface ErrorBreakdown {
   substitution: number;
   omission: number;
   insertion: number;
 }
 
-interface ScoredAttempt {
+export interface ScoredAttempt {
   id: string;
   grossWpm: number;
   netWpm: number;
@@ -86,7 +86,7 @@ interface ScoredAttempt {
   completedAt: Date;
 }
 
-interface LeaderboardEntry {
+export interface LeaderboardEntry {
   rank: number;
   studentId: string;
   studentName: string;
@@ -373,7 +373,7 @@ export class TypingService {
         correctKeystrokes,
         backspaceCount,
         errorCount,
-        errorBreakdown,
+        errorBreakdown: { ...errorBreakdown },
         keyHeatmap,
       },
     });

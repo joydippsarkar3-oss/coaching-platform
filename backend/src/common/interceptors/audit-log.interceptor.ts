@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { tenantStorage } from '../middleware/tenant.storage';
 
@@ -36,7 +37,9 @@ export class AuditLogInterceptor implements NestInterceptor {
                 action: method,
                 entity: this.resolveEntity(request.path as string),
                 entityId: (request.params?.id as string) ?? null,
-                newValue: this.safeBody(request.body),
+                ...(this.safeBody(request.body)
+                  ? { newValue: this.safeBody(request.body) as Prisma.InputJsonValue }
+                  : {}),
                 ipAddress: this.getIp(request),
                 userAgent: request.headers?.['user-agent'] ?? null,
               },

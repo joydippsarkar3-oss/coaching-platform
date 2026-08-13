@@ -4,6 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { WhatsappWindowService } from '../notifications/whatsapp-window.service';
 import * as crypto from 'crypto';
 
 /** Handles inbound webhooks from Razorpay, Cashfree, WhatsApp, and Meta. */
@@ -11,7 +12,10 @@ import * as crypto from 'crypto';
 export class WebhooksService {
   private readonly logger = new Logger(WebhooksService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly window: WhatsappWindowService,
+  ) {}
 
   // ─── Razorpay ─────────────────────────────────────────────────────────────
 
@@ -146,30 +150,10 @@ export class WebhooksService {
 
       this.logger.log(`WhatsApp inbound from ${phone}: ${text.slice(0, 40)}`);
 
-      // Update or open a 24-hour window
+      // Each inbound message opens or extends the 24-hour service window that
+      // permits free-form outbound replies.
       const now = new Date();
-      const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-
-      await this.prisma.whatsappWindow.upsert({
-        where: {
-          // unique on phone — we use a pseudo-composite: just phone for simplicity
-          // In prod add a @@unique([phone]) or use findFirst + create
-          id: `phone_${phone}`,
-        },
-        update: {
-          lastMsgAt: now,
-          expiresAt,
-          msgCount: { increment: 1 },
-        },
-        create: {
-          id: `phone_${phone}`,
-          phone,
-          openedAt: now,
-          expiresAt,
-          lastMsgAt: now,
-          msgCount: 1,
-        },
-      });
+      await this.window.recordInbound(phone, null, now);
 
       // Record as inbound notification for CRM
       await this.prisma.notification.create({

@@ -4,7 +4,13 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { ExamsService } from './exams.service';
-import { CreateExamDto, UpdateExamDto, StartAttemptDto, SubmitAttemptDto } from './dto/exam.dto';
+import {
+  CreateExamDto,
+  UpdateExamDto,
+  StartAttemptDto,
+  BeginAttemptDto,
+  SubmitAttemptDto,
+} from './dto/exam.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { TenantInterceptor } from '../../common/interceptors/tenant.interceptor';
@@ -54,19 +60,37 @@ export class ExamsController {
   }
 
   @Post(':id/attempts/start')
-  @ApiOperation({ summary: 'Start an exam attempt for a student' })
-  startAttempt(
-    @Param('id') id: string,
-    @Body() dto: StartAttemptDto,
-    @TenantId() centerId: string | null,
+  @ApiOperation({ summary: 'Issue an exam paper for a student (status ISSUED)' })
+  startAttempt(@Param('id') id: string, @Body() dto: StartAttemptDto) {
+    return this.examsService.generatePaper(id, dto.studentId);
+  }
+
+  @Put('attempts/:attemptId/begin')
+  @ApiOperation({
+    summary:
+      'Begin an issued attempt (ISSUED → IN_PROGRESS). Binds the attempt to the calling device.',
+  })
+  beginAttempt(
+    @Param('attemptId') attemptId: string,
+    @Body() dto: BeginAttemptDto,
   ) {
-    return this.examsService.startAttempt(id, dto, centerId ?? undefined);
+    return this.examsService.startAttempt(attemptId, dto.studentId, dto.deviceFingerprint);
   }
 
   @Put('attempts/:attemptId/submit')
   @ApiOperation({ summary: 'Submit answers for an in-progress attempt; auto-evaluates and returns score' })
-  submitAttempt(@Param('attemptId') attemptId: string, @Body() dto: SubmitAttemptDto) {
-    return this.examsService.submitAttempt(attemptId, dto);
+  async submitAttempt(
+    @Param('attemptId') attemptId: string,
+    @Body() dto: SubmitAttemptDto,
+  ) {
+    // Persist the final answer set, then grade the attempt.
+    await this.examsService.saveAnswers(
+      attemptId,
+      dto.answers.map((a) => ({ questionId: a.questionId, answer: a.selectedKey })),
+      undefined,
+      dto.deviceFingerprint,
+    );
+    return this.examsService.submitAttempt(attemptId, false, dto.deviceFingerprint);
   }
 
   @Get(':id/attempts')

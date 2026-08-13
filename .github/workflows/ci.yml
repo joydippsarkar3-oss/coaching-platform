@@ -115,6 +115,77 @@ jobs:
         env:
           VITE_API_BASE_URL: https://api.example.com
 
+  e2e:
+    name: E2E (Playwright, F1–F6)
+    runs-on: ubuntu-latest
+    needs: [backend, website]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: e2edb
+          POSTGRES_USER: e2euser
+          POSTGRES_PASSWORD: e2epass
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: --health-cmd "redis-cli ping" --health-interval 10s
+    env:
+      DATABASE_URL: postgresql://e2euser:e2epass@localhost:5432/e2edb
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: e2e-secret-32chars-minimum-length
+      JWT_REFRESH_SECRET: e2e-refresh-32chars-minimum-len
+      # Mounts the /e2e fixture routes. Never set on a real deployment.
+      E2E_FIXTURES_ENABLED: 'true'
+      # Routes are mounted under the global api/v1 prefix; /health is excluded.
+      API_URL: http://localhost:3000/api/v1
+      BASE_URL: http://localhost:3001
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build and start backend
+        working-directory: backend
+        run: |
+          npm ci
+          npx prisma generate
+          npx prisma migrate deploy
+          npm run build
+          npm run start:prod &
+          npx wait-on http://localhost:3000/health --timeout 120000
+
+      - name: Build and start website
+        working-directory: website
+        run: |
+          npm ci
+          npm run build
+          npx next start -p 3001 &
+          npx wait-on http://localhost:3001 --timeout 120000
+
+      - name: Run Playwright suite
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npx playwright test
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: e2e/playwright-report
+          retention-days: 7
+
   flutter-app:
     name: Flutter App
     runs-on: ubuntu-latest

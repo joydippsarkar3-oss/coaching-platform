@@ -1,4 +1,4 @@
-import apiClient from '../client'
+import apiClient, { getBlob } from '../client'
 import type { ApiResponse } from '@/types/api'
 
 export interface WalletSummary {
@@ -121,13 +121,13 @@ export const walletApi = {
     apiClient.post<ApiResponse<WalletTransaction>>('/wallet/manual-credit', payload),
 
   exportWalletsCsv: () =>
-    apiClient.get<Blob>('/wallet/export', { responseType: 'blob' }),
+    getBlob('/wallet/export'),
 
   listCampaigns: () =>
     apiClient.get<ApiResponse<PromoCampaign[]>>('/wallet/campaigns'),
 
   createCampaign: (payload: CreateCampaignPayload) =>
-    apiClient.post<ApiResponse<PromoCampaign>>('/api/v1/wallet/campaigns', payload),
+    apiClient.post<ApiResponse<PromoCampaign>>('/wallet/campaigns', payload),
 
   toggleCampaign: (campaignId: string, isActive: boolean) =>
     apiClient.patch<ApiResponse<PromoCampaign>>(`/wallet/campaigns/${campaignId}`, { isActive }),

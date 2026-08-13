@@ -5,13 +5,17 @@ import { NotificationWorker } from './notification.worker';
 import { InstallmentReminderWorker } from './installment-reminder.worker';
 import { LedgerReconciliationWorker } from './ledger-reconciliation.worker';
 import { ReportExportWorker } from './report-export.worker';
+import { PruneWindowsWorker } from './prune-windows.worker';
+import { DataRetentionWorker } from './data-retention.worker';
 import { PrismaModule } from '../common/prisma/prisma.module';
 import { ConfigModule } from '@nestjs/config';
+import { NotificationsModule } from '../modules/notifications/notifications.module';
 
 @Module({
   imports: [
     PrismaModule,
     ConfigModule,
+    NotificationsModule,
     BullModule.registerQueue(
       { name: 'pdf-generation' },
       { name: 'notification-dispatch' },
@@ -25,6 +29,8 @@ import { ConfigModule } from '@nestjs/config';
     InstallmentReminderWorker,
     LedgerReconciliationWorker,
     ReportExportWorker,
+    PruneWindowsWorker,
+    DataRetentionWorker,
   ],
   exports: [BullModule],
 })

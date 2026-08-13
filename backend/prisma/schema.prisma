@@ -72,6 +72,7 @@ enum PaymentMethod {
   CHEQUE
   CARD
   WALLET
+  ONLINE // gateway order created; actual instrument resolved on webhook
 }
 
 enum InstallmentStatus {
@@ -178,6 +179,7 @@ model Center {
   status      CenterStatus @default(PENDING)
   territoryId String?
   logoUrl     String?
+  plan        Json?        // per-center feature flags, e.g. { auto_issue: true }
   lastReceiptSeq Int          @default(0)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
@@ -237,6 +239,7 @@ model User {
   phone        String    @unique
   passwordHash String?
   totpSecret   String?
+  dateOfBirth  DateTime?
   isActive     Boolean   @default(true)
   lastLoginAt  DateTime?
   createdAt    DateTime  @default(now())
@@ -320,18 +323,60 @@ model Student {
 model Consent {
   id        String   @id @default(uuid())
   centerId  String?
-  studentId String
-  type      String   // e.g. "DATA_SHARING", "MARKETING", "TERMS"
+  studentId String?
+  type      String?  // legacy: "DATA_SHARING", "MARKETING", "TERMS"
   granted   Boolean  @default(false)
   ipAddress String?
   userAgent String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  student Student @relation(fields: [studentId], references: [id])
+  // DPDP Act 2023 — purpose-coded, versioned, append-only
+  subjectUserId  String?
+  guardianUserId String?
+  purpose        String?
+  noticeVersion  String?
+  method         String?   // otp_verified | assisted_otp | written
+  grantedAt      DateTime?
+  withdrawnAt    DateTime?
+
+  student Student? @relation(fields: [studentId], references: [id])
 
   @@index([centerId])
   @@index([studentId])
+  @@index([subjectUserId, purpose])
+}
+
+model ConsentRequest {
+  id            String    @id @default(uuid())
+  studentUserId String
+  guardianPhone String
+  purpose       String
+  noticeVersion String
+  otp           String
+  otpExpiresAt  DateTime
+  status        String    @default("PENDING") // PENDING | VERIFIED | EXPIRED
+  verifiedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([studentUserId])
+  @@index([guardianPhone])
+}
+
+model ErasureRequest {
+  id          String    @id @default(uuid())
+  userId      String
+  requestedBy String
+  status      String    @default("PENDING") // PENDING | APPROVED | REJECTED | COMPLETED
+  requestedAt DateTime  @default(now())
+  reviewedAt  DateTime?
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([status])
 }
 
 // ─────────────────────────────────────────────
@@ -758,6 +803,7 @@ model ExamAnswer {
   attempt  ExamAttempt @relation(fields: [attemptId], references: [id])
   question Question    @relation(fields: [questionId], references: [id])
 
+  @@unique([attemptId, questionId])
   @@index([centerId])
   @@index([attemptId])
 }
@@ -943,8 +989,12 @@ model WhatsappWindow {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  center Center? @relation(fields: [centerId], references: [id])
+
+  // One live window per phone, so the inbound webhook can upsert on the phone
+  // itself instead of synthesising a pseudo-id.
+  @@unique([phone])
   @@index([centerId])
-  @@index([phone])
   @@index([expiresAt])
 }
 
@@ -1142,9 +1192,11 @@ model JobApplication {
 
   job     Job     @relation(fields: [jobId], references: [id])
   student Student @relation(fields: [studentId], references: [id])
+  center  Center  @relation(fields: [centerId], references: [id])
 
   @@unique([jobId, studentId])
   @@index([studentId])
+  @@index([centerId])
 }
 
 enum ApplicationStatus {

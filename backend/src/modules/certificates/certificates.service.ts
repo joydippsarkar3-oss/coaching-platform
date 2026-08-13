@@ -194,7 +194,7 @@ export class CertificatesService {
     });
     if (!cert) throw new NotFoundException(`Certificate ${certId} not found`);
 
-    const centerPlan = (cert.center?.['plan'] ?? {}) as Record<string, unknown>;
+    const centerPlan = (cert.center?.plan ?? {}) as Record<string, unknown>;
     if (!centerPlan['auto_issue']) return;
 
     await this.issueMany([certId]);

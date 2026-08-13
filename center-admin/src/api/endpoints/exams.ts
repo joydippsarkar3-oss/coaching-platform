@@ -1,4 +1,4 @@
-import apiClient from '../client'
+import apiClient, { getBlob } from '../client'
 import type { ApiResponse, ExamScheduleRequest } from '@/types/api'
 import type { Exam, ExamAttempt } from '@/types/models'
 
@@ -17,5 +17,5 @@ export const examsApi = {
     ),
 
   generateLoginSlips: (examId: string) =>
-    apiClient.get<Blob>(`/exams/${examId}/login-slips`, { responseType: 'blob' }),
+    getBlob(`/exams/${examId}/login-slips`),
 }

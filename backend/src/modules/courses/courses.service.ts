@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateCourseDto, UpdateCourseDto } from './dto/course.dto';
-import { Role } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
 
 @Injectable()
 export class CoursesService {
@@ -15,7 +15,14 @@ export class CoursesService {
     const exists = await this.prisma.course.findUnique({ where: { code: dto.code } });
     if (exists) throw new ConflictException('Course with this code already exists');
 
-    return this.prisma.course.create({ data: { ...dto, centerId: null } });
+    const { syllabus, ...rest } = dto;
+    return this.prisma.course.create({
+      data: {
+        ...rest,
+        centerId: null,
+        ...(syllabus ? { syllabus: syllabus as Prisma.InputJsonValue } : {}),
+      },
+    });
   }
 
   async findAll(page = 1, limit = 20, status?: string) {
@@ -45,7 +52,14 @@ export class CoursesService {
       throw new ForbiddenException('Only HO staff can modify courses');
     }
     await this.findOne(id);
-    return this.prisma.course.update({ where: { id }, data: dto });
+    const { syllabus, ...rest } = dto;
+    return this.prisma.course.update({
+      where: { id },
+      data: {
+        ...rest,
+        ...(syllabus ? { syllabus: syllabus as Prisma.InputJsonValue } : {}),
+      },
+    });
   }
 
   async remove(id: string) {

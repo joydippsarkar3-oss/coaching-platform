@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsEnum } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsEnum, IsArray } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { NotificationChannel } from '@prisma/client';
 
@@ -31,4 +31,29 @@ export class SendNotificationDto {
   @IsString()
   @IsNotEmpty()
   body: string;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'Meta-approved template name. Required for WHATSAPP when the 24-hour ' +
+      'service window is closed — free-form text is rejected by the API there.',
+  })
+  @IsOptional()
+  @IsString()
+  templateName?: string;
+
+  @ApiProperty({ required: false, example: 'en', description: 'WhatsApp template language code' })
+  @IsOptional()
+  @IsString()
+  templateLang?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'WhatsApp template component objects (header/body/button parameters)',
+    type: 'array',
+    items: { type: 'object' },
+  })
+  @IsOptional()
+  @IsArray()
+  templateComponents?: object[];
 }

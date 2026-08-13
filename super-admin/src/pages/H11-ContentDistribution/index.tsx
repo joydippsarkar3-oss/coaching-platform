@@ -88,7 +88,7 @@ function ContentLibraryTab({ onSelectForDistribution }: { onSelectForDistributio
   const [uploadOpen, setUploadOpen] = useState(false);
 
   const { data: courses = [] } = useApi<Course[]>('/api/v1/courses');
-  const { data: items = [], loading, mutate } = usePollingApi<ContentItem[]>(
+  const { data: items = [], isLoading: loading, mutate } = usePollingApi<ContentItem[]>(
     '/api/v1/content-items', 60_000
   );
 
@@ -193,7 +193,7 @@ function DistributionTab({ preselected }: { preselected: ContentItem | null }) {
   }, [preselected]);
 
   const { data: items = [] } = useApi<ContentItem[]>('/api/v1/content-items');
-  const { data: centerDist = [], loading: distLoading, mutate: mutateDistribution } =
+  const { data: centerDist = [], isLoading: distLoading, mutate: mutateDistribution } =
     useApi<CenterDistribution[]>(
       selectedItem ? `/api/v1/content-items/${selectedItem.id}/distribution` : null
     );
